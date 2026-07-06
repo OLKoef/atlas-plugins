@@ -4,3 +4,5 @@ dist/
 *.log
 # scratch dir used by scaffold/build tests
 .build-test/
+# packed plugin zips produced by the PL15 catalog pipeline
+dist-artifacts/

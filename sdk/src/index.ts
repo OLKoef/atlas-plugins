@@ -71,3 +71,15 @@ export type {
   InstalledPlugin,
   CatalogEntry,
 } from './plugin.js';
+
+export {
+  EMPTY_CATALOG,
+  CatalogError,
+  parseCatalogEntry,
+  parseCatalog,
+  safeParseCatalog,
+  buildCatalogEntry,
+  upsertCatalogEntry,
+  serializeCatalog,
+} from './catalog.js';
+export type { Catalog, ReleaseFacts, SafeParseCatalogResult } from './catalog.js';

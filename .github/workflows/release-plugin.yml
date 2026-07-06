@@ -1,0 +1,85 @@
+name: Release plugin
+
+# A plugin release is a tag shaped `<id>-v<semver>` (e.g. `pomodoro-v1.0.0`). On such a tag
+# this builds the plugin, zips it, attaches the zip to a GitHub Release, and regenerates the
+# committed catalog.json on the default branch — the zero-infra model Atlas fetches from
+# (same as the OLKoef/atlas-releases app-download flow). App-style `vX.Y.Z` tags never match.
+on:
+  push:
+    tags:
+      - '*-v*'
+
+permissions:
+  contents: write # create releases + push the regenerated catalog.json
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (at the tag)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build SDK + plugins
+        run: npm run build
+
+      - name: Pack plugin zip
+        id: pack
+        # Stages the installable files, zips them, computes sha256, and emits
+        # id/version/zip_path/zip_name/sha256/download_url to the step outputs.
+        run: node scripts/build-catalog.mjs --skip-catalog --github-output
+
+      - name: Create GitHub Release + upload zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "${{ steps.pack.outputs.zip_path }}" \
+            --title "${{ steps.pack.outputs.id }} v${{ steps.pack.outputs.version }}" \
+            --notes "Automated plugin release for \`$GITHUB_REF_NAME\` (sha256 \`${{ steps.pack.outputs.sha256 }}\`)." \
+            --verify-tag
+
+      - name: Regenerate catalog.json on the default branch
+        env:
+          ZIP_PATH: ${{ steps.pack.outputs.zip_path }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Retry to absorb a push race if two plugin tags publish concurrently: each attempt
+          # re-applies the upsert on top of the latest default-branch catalog.
+          for attempt in 1 2 3; do
+            git fetch origin "$DEFAULT_BRANCH"
+            git switch -C "$DEFAULT_BRANCH" "origin/$DEFAULT_BRANCH"
+
+            node scripts/build-catalog.mjs \
+              --tag "$GITHUB_REF_NAME" \
+              --zip "$ZIP_PATH" \
+              --icon-ref "$DEFAULT_BRANCH"
+
+            if git diff --quiet -- catalog.json; then
+              echo "catalog.json already up to date."
+              break
+            fi
+
+            git add catalog.json
+            git commit -m "chore(catalog): publish ${GITHUB_REF_NAME}"
+            if git push origin "HEAD:$DEFAULT_BRANCH"; then
+              echo "Published catalog entry for ${GITHUB_REF_NAME}."
+              break
+            fi
+
+            echo "Push rejected (attempt ${attempt}); refetching and retrying."
+            sleep 3
+          done

@@ -12,6 +12,7 @@
     "build": "npm run build -w @atlas/plugin-sdk && npm run build -w @atlas/plugin-example-widget",
     "build:sdk": "npm run build -w @atlas/plugin-sdk",
     "typecheck": "tsc -p sdk/tsconfig.json --noEmit",
+    "catalog": "node scripts/build-catalog.mjs",
     "test": "vitest run"
   },
   "devDependencies": {
