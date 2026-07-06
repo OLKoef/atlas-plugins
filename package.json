@@ -1,0 +1,13 @@
+{
+  "name": "atlas-plugins",
+  "private": true,
+  "version": "0.0.0",
+  "workspaces": [
+    "sdk",
+    "plugins/*"
+  ],
+  "scripts": {
+    "build": "echo 'no packages yet -- PL2 replaces this with a real Vite lib-mode build' && exit 0",
+    "test": "echo 'no tests yet -- PL2 replaces this with real SDK/plugin unit tests' && exit 0"
+  }
+}
