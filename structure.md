@@ -9,16 +9,21 @@ version via its own catalog pipeline. Keep this file current with what's built a
 ```
 atlas-plugins/
 ├── package.json            # workspace root; the build+test gate lives here
-├── vitest.config.ts        # single root Vitest run (SDK + scaffolder + build proof)
+├── vitest.config.ts        # single root Vitest run (SDK + scaffolder + scripts + build proof)
+├── catalog.json            # committed marketplace catalog Atlas fetches (PL15 regenerates it)
 ├── sdk/                    # @atlas/plugin-sdk — the typed plugin API + Vite config
 ├── create-plugin/          # create-atlas-plugin — scaffolder CLI + template
 ├── plugins/                # authored / built plugins (one dir per plugin id)
 │   └── example-widget/     # reference plugin: the create-plugin template, rendered
+├── scripts/                # release/catalog pipeline (build-catalog.mjs + lib/release.mjs)
+├── .github/workflows/      # release-plugin.yml — CI on a `<id>-v<semver>` tag
 ├── structure.md            # this file
 └── documentation.md        # dated change log (newest first)
 ```
 
-Workspaces: `sdk`, `create-plugin`, `plugins/*`. `dist/` and `node_modules/` are gitignored.
+Workspaces: `sdk`, `create-plugin`, `plugins/*`. `dist/`, `dist-artifacts/` (packed plugin
+zips), and `node_modules/` are gitignored. `scripts/` is not a workspace — it runs off the
+root `node_modules` and imports the built `@atlas/plugin-sdk`.
 
 ## Gate
 
@@ -26,7 +31,8 @@ Workspaces: `sdk`, `create-plugin`, `plugins/*`. `dist/` and `node_modules/` are
 
 - `build` → `tsc` builds `@atlas/plugin-sdk` to `sdk/dist`, then `vite build` builds
   `@atlas/plugin-example-widget` to `plugins/example-widget/dist/index.js`.
-- `test` → `vitest run` over `sdk/src/**/*.test.ts` and `create-plugin/**/*.test.mjs`.
+- `test` → `vitest run` over `sdk/src/**/*.test.ts`, `create-plugin/**/*.test.mjs`, and
+  `scripts/**/*.test.mjs`.
 
 ## `sdk/` — `@atlas/plugin-sdk`
 
@@ -44,6 +50,11 @@ implementation.md is this repo's source of truth (it cannot read Dashboard's Typ
   and `PluginPermissionError`.
 - `src/plugin.ts` — the `AtlasPlugin` entry contract, `AtlasPluginRuntime` (the
   `window.AtlasPluginRuntime` global), and `InstalledPlugin` / `CatalogEntry`.
+- `src/catalog.ts` — the `Catalog` (`{ plugins }`) file shape + the pure `parseCatalog` /
+  `parseCatalogEntry` / `safeParseCatalog` validator (the PL6 acceptance seam), plus the
+  pipeline builders `buildCatalogEntry` (manifest + release facts → a self-validated entry),
+  `upsertCatalogEntry` (replace-by-id, id-sorted) and `serializeCatalog` (canonical committed
+  bytes). Used by the PL15 pipeline and reusable by the PL16 website.
 - `src/index.ts` — public barrel (`.` export → types + validator + version).
 - `src/vite.ts` — the `@atlas/plugin-sdk/vite` subpath: `defineAtlasPluginConfig()` and
   `atlasReactRuntimePlugin()`. Emits an ESM library build to `index.js` and rewrites
@@ -71,6 +82,32 @@ Vite into a plugin's graph).
 One directory per plugin id. `example-widget` is the reference render of the template and
 the build-gate proof. Real marketplace plugins (e.g. Disk Manager, DISK5+) land here as
 SDK-authored, Vite-built bundles.
+
+## `scripts/` + `.github/` — catalog pipeline (PL15)
+
+On a plugin release tag `<id>-v<semver>` (e.g. `pomodoro-v1.0.0`; app-style `vX.Y.Z` tags
+never match), CI publishes the plugin with zero hosting infra — the same model as the
+`OLKoef/atlas-releases` download flow.
+
+- `scripts/lib/release.mjs` — pure conventions: `parseReleaseTag` (`<id>-v<semver>` → id +
+  version, dashes in both handled), `pluginZipName`, `releaseAssetUrl` (deterministic GitHub
+  Release asset URL), `rawRepoFileUrl` (raw default-branch URL for the catalog icon), and the
+  `resolveRepoSlug` / `resolveIconRef` / `resolveTag` env resolvers.
+- `scripts/build-catalog.mjs` — the network-free core: validates the plugin's manifest against
+  the tag, **packs** the installable files (`entry` bundle from `dist/` + `manifest.json` +
+  optional `styles`/`icon`) into `dist-artifacts/<id>-v<version>.zip` via `zip`, computes the
+  **sha256**, builds the `CatalogEntry` and **upserts** it into `catalog.json`. Flags:
+  `--zip` (use a pre-built archive instead of packing), `--skip-catalog` (pack only),
+  `--dry-run` (emit the catalog JSON to stdout, persist nothing), `--github-output`.
+- `.github/workflows/release-plugin.yml` — the tag-triggered job: build → pack (`--skip-catalog
+  --github-output`) → `gh release create` with the zip → regenerate `catalog.json` on the
+  default branch (`--zip` the packed archive) and commit it back, with a fetch-rebase retry to
+  absorb concurrent-release push races.
+
+`catalog.json` (repo root) is the committed fetch target — `{ "plugins": [ CatalogEntry… ] }`,
+id-sorted, starting empty. Each entry shape is guaranteed to satisfy the SDK's `parseCatalog`
+(and therefore Dashboard's PL6 parser), and its `sha256` matches the released zip by
+construction.
 
 ## Authoring a plugin
 
