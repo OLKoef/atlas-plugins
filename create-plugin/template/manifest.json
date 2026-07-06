@@ -1,0 +1,11 @@
+{
+  "id": "{{id}}",
+  "name": "{{name}}",
+  "version": "{{version}}",
+  "type": "widget",
+  "entry": "index.js",
+  "minAtlasApi": 1,
+  "description": "{{description}}",
+  "author": "{{author}}",
+  "permissions": []
+}

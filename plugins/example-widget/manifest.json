@@ -1,0 +1,11 @@
+{
+  "id": "example-widget",
+  "name": "Example Widget",
+  "version": "0.1.0",
+  "type": "widget",
+  "entry": "index.js",
+  "minAtlasApi": 1,
+  "description": "Starter widget scaffolded by create-atlas-plugin.",
+  "author": "Atlas",
+  "permissions": []
+}

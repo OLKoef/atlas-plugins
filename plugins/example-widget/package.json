@@ -1,0 +1,19 @@
+{
+  "name": "@atlas/plugin-example-widget",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@atlas/plugin-sdk": "*",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}

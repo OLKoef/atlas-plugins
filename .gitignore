@@ -2,3 +2,5 @@ node_modules/
 dist/
 .DS_Store
 *.log
+# scratch dir used by scaffold/build tests
+.build-test/

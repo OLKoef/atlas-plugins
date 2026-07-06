@@ -1,0 +1,18 @@
+{
+  "name": "create-atlas-plugin",
+  "version": "0.1.0",
+  "description": "Scaffold a new Atlas marketplace plugin (Vite lib-mode, React externalized).",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "create-atlas-plugin": "index.mjs"
+  },
+  "exports": {
+    "./scaffold": "./src/scaffold.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "src",
+    "template"
+  ]
+}
