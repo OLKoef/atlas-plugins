@@ -1,3 +1,15 @@
 {
-  "plugins": []
+  "plugins": [
+    {
+      "id": "disk-manager",
+      "name": "Disk Manager",
+      "version": "1.0.0",
+      "type": "tool",
+      "description": "See what's taking up space across Local and iCloud, then reclaim it — a treemap you can click straight into a triage session.",
+      "author": "Atlas",
+      "minAtlasApi": 1,
+      "downloadUrl": "https://github.com/OLKoef/atlas-plugins/releases/download/disk-manager-v1.0.0/disk-manager-v1.0.0.zip",
+      "sha256": "4ccc8b16e88fabc8000c8a05b5d1bd988104740a32067e377c0ed32b908cca96"
+    }
+  ]
 }

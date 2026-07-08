@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { parseCatalog } from '@atlas/plugin-sdk';
+import { parseCatalog, parseCatalogEntry, serializeCatalog } from '@atlas/plugin-sdk';
 import { releaseAssetUrl } from './lib/release.mjs';
 
 const repoRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -24,13 +24,17 @@ afterAll(async () => {
   await fs.rm(path.join(repoRoot, 'dist-artifacts'), { recursive: true, force: true });
 });
 
-// The script imports the built SDK (@atlas/plugin-sdk -> sdk/dist). Build it if absent so the
-// suite is self-contained even when run without the full gate's prior `npm run build`.
+// The script imports the built SDK (@atlas/plugin-sdk -> sdk/dist) and the packing tests need
+// the plugins' dist bundles. Build whatever is absent so the suite is self-contained even when
+// run without the full gate's prior `npm run build`.
 beforeAll(() => {
   if (!existsSync(path.join(repoRoot, 'sdk', 'dist', 'index.js'))) {
     execFileSync('npm', ['run', 'build:sdk'], { cwd: repoRoot, stdio: 'inherit' });
   }
-}, 120_000);
+  if (!existsSync(path.join(repoRoot, 'plugins', 'disk-manager', 'dist', 'index.js'))) {
+    execFileSync('npm', ['run', 'build'], { cwd: repoRoot, stdio: 'inherit' });
+  }
+}, 180_000);
 
 /** Run the CLI, returning { stdout, status }. Never throws on non-zero exit. */
 function run(args) {
@@ -118,6 +122,70 @@ describe('build-catalog.mjs — packing (real zip)', () => {
     expect(existsSync(zipPath)).toBe(true);
     const zipSha = createHash('sha256').update(await fs.readFile(zipPath)).digest('hex');
     expect(entry.sha256).toBe(zipSha);
+  });
+});
+
+describe('build-catalog.mjs — Disk Manager v1 publish (DISK9)', () => {
+  // Disk Manager is PL5's first *real* catalog consumer (PL5 shipped tested only against
+  // fixture zips). This packs the actual built plugin and asserts the produced entry is the
+  // shape parseCatalog accepts, with a sha256 that matches the very zip that was packed.
+  it.skipIf(!hasZip)('packs disk-manager@1.0.0 into a parseCatalog-valid entry whose sha256 matches the zip', async () => {
+    const { stdout, status } = run([
+      '--tag', 'disk-manager-v1.0.0',
+      '--repo', REPO,
+      '--skip-catalog',
+      '--dry-run',
+    ]);
+    expect(status).toBe(0);
+
+    const entry = parseCatalogEntry(JSON.parse(stdout)); // AC: schema accepted by parseCatalog
+    expect(entry.id).toBe('disk-manager');
+    expect(entry.name).toBe('Disk Manager');
+    expect(entry.version).toBe('1.0.0');
+    expect(entry.type).toBe('tool');
+    expect(entry.minAtlasApi).toBe(1);
+    expect(entry.downloadUrl).toBe(
+      releaseAssetUrl(REPO, 'disk-manager-v1.0.0', 'disk-manager-v1.0.0.zip'),
+    );
+
+    const zipPath = path.join(repoRoot, 'dist-artifacts', 'disk-manager-v1.0.0.zip');
+    expect(existsSync(zipPath)).toBe(true);
+    const zipSha = createHash('sha256').update(await fs.readFile(zipPath)).digest('hex');
+    expect(entry.sha256).toBe(zipSha); // AC: sha256 matches the published zip
+  });
+
+  it('rejects a disk-manager tag whose version disagrees with the bumped manifest', async () => {
+    const dir = await tmpRoot();
+    const zip = path.join(dir, 'disk-manager-v0.1.0.zip');
+    await fs.writeFile(zip, 'stale');
+    const { status } = run(['--tag', 'disk-manager-v0.1.0', '--zip', zip, '--repo', REPO, '--dry-run']);
+    expect(status).toBe(1);
+  });
+});
+
+describe('catalog.json — committed fetch target (DISK9)', () => {
+  let raw;
+  let catalog;
+  beforeAll(async () => {
+    raw = await fs.readFile(path.join(repoRoot, 'catalog.json'), 'utf8');
+    catalog = parseCatalog(JSON.parse(raw)); // must satisfy the SDK/Dashboard parser
+  });
+
+  it('publishes a schema-valid disk-manager@1.0.0 entry', () => {
+    const entry = catalog.plugins.find((p) => p.id === 'disk-manager');
+    expect(entry).toBeDefined();
+    expect(entry.name).toBe('Disk Manager');
+    expect(entry.version).toBe('1.0.0');
+    expect(entry.type).toBe('tool');
+    expect(entry.minAtlasApi).toBe(1);
+    expect(entry.downloadUrl).toBe(
+      releaseAssetUrl(REPO, 'disk-manager-v1.0.0', 'disk-manager-v1.0.0.zip'),
+    );
+    expect(entry.sha256).toMatch(/^[a-f0-9]{64}$/); // a real digest, not a placeholder
+  });
+
+  it('is already in the pipeline\'s canonical form (tag-push regeneration is a no-op diff)', () => {
+    expect(raw).toBe(serializeCatalog(catalog));
   });
 });
 
