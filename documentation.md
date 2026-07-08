@@ -1,5 +1,25 @@
 # Documentation log
 
+### 2026-07-08 — DISK7: Disk Manager AI-assisted reorganization
+
+Added the **review-then-approve** AI-reorg flow on top of the DISK5 navigation shell. The
+`ReorgController` batches file metadata through the user-configured model via the DISK10
+`ai.chat` bridge (`proposeReorg` → `buildReorgPrompt` → `parseReorgProposal`, tolerant of code
+fences and guarding against `..`-traversal / empty / no-op moves), then presents the proposal
+as a **tree diff** (proposed vs. current) the user reviews — accept/reject each move, Accept-all
+/ Reject-all, and adjust a destination inline. Crucially it **never auto-applies**:
+`resolveReorgApply` + `applyReorgDecision` are the single seam that touches disk, and they refuse
+to call `disk.applyReorgPlan` (DISK3) unless the review is resolved with explicit `approved:true`
+**and** ≥1 accepted move — so no move can fire without approval. A model rejection surfaces as
+"can't propose right now," not a crash. Added the `ai:chat` permission the proposal needs. Why:
+the wireframe's locked AI-reorg contract is that a plan is proposed and reviewed, and the user —
+never the model — decides what moves. Files: plugins/disk-manager/src/reorgModel.ts,
+plugins/disk-manager/src/Reorg.tsx, plugins/disk-manager/src/Panel.tsx,
+plugins/disk-manager/manifest.json, plugins/disk-manager/src/styles.css,
+plugins/disk-manager/src/__tests__/manifest.test.ts,
+plugins/disk-manager/src/__tests__/reorg.test.ts,
+plugins/disk-manager/src/__tests__/reorg.test.tsx, structure.md.
+
 ### 2026-07-08 — DISK6: Disk Manager Triage swipe UI
 
 Built the Tinder-style triage screen on top of the DISK5 navigation shell: one reclaim-sorted

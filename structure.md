@@ -15,7 +15,7 @@ atlas-plugins/
 ├── create-plugin/          # create-atlas-plugin — scaffolder CLI + template
 ├── plugins/                # authored / built plugins (one dir per plugin id)
 │   ├── example-widget/     # reference plugin: the create-plugin template, rendered
-│   └── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage screens
+│   └── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage + AI-reorg screens
 ├── scripts/                # release/catalog pipeline (build-catalog.mjs + lib/release.mjs)
 ├── .github/workflows/      # release-plugin.yml — CI on a `<id>-v<semver>` tag
 ├── structure.md            # this file
@@ -88,13 +88,14 @@ SDK-authored, Vite-built bundles.
 ### `plugins/disk-manager/` — Disk Manager (`type: "tool"`, DISK5+)
 
 Full-sidebar plugin that visualizes and reclaims disk space. DISK5 ships the scaffold,
-manifest, and the **Visualize** screen; DISK6 adds the **Triage** swipe UI; DISK7–DISK8 add
-AI-reorg and the session-summary/undo-log on top of the navigation model established here.
+manifest, and the **Visualize** screen; DISK6 adds the **Triage** swipe UI; DISK7 adds the
+**AI-reorg review** (propose → tree diff → approve → apply); DISK8 adds the
+session-summary/undo-log on top of the navigation model established here.
 Logic is split from React so it unit-tests in the shared node/vitest run with no new deps:
 
 - `manifest.json` — `type:"tool"`, `minAtlasApi:1`, permissions
-  `disk:read`/`disk:trash`/`disk:evict`/`disk:uninstall-app`/`disk:reorg` (DISK4); validated
-  by the SDK's `parseManifest` in `src/__tests__/manifest.test.ts`.
+  `disk:read`/`disk:trash`/`disk:evict`/`disk:uninstall-app`/`disk:reorg` (DISK4) + `ai:chat`
+  (DISK7 reorg proposal); validated by the SDK's `parseManifest` in `src/__tests__/manifest.test.ts`.
 - `src/model.ts` — framework-free: `DiskScope` (Local/iCloud/Both), `buildTreemapNodes` +
   `squarify` layout (area exactly proportional to bytes) from the DISK1 `disk.scan`
   aggregates, `buildVisualizeModel`, the iCloud split (Drive = browsable treemap;
@@ -112,15 +113,29 @@ Logic is split from React so it unit-tests in the shared node/vitest run with no
   `applyTriageDecision` (fires `deleteToTrash`/`evict`/`uninstallApp`), plus the mocked demo
   queue + a succeeding `mockTriageDiskApi()`. Named `triageModel.ts` (not `triage.ts`) to
   avoid a case-only clash with `Triage.tsx` on case-insensitive filesystems.
-- `src/Visualize.tsx` / `src/Triage.tsx` — presentational screens; `src/Panel.tsx` — the shell
-  (`useReducer` + async `disk.scan`) whose `TriageController` drives the reclaim-sorted queue
-  (fire the matching `disk.*` op per swipe, tally reclaimed bytes, auto-end at queue end);
-  Reorg/Summary remain placeholders. `src/index.tsx` default-exports the `AtlasPlugin`
-  (`{ manifest, Panel }`) and imports `styles.css` (scoped under `.atlas-disk-manager`).
+- `src/reorgModel.ts` — framework-free AI-reorg **review-then-approve** model (DISK7):
+  `buildReorgPrompt` frames a batch of file metadata for the configured model, `proposeReorg`
+  sends it via `ai.chat` (DISK10) and `parseReorgProposal` turns the reply into validated
+  moves (tolerant of code fences; drops `..`-traversal / empty / no-op moves into `skipped`);
+  the tree-diff review reducer (`buildReorgReview`, `toggleReorgMove`, `setAllReorgMoves`,
+  `adjustReorgMove` with the same path guard, `acceptedReorgMoves`); and the **approval gate**
+  `resolveReorgApply` (blocks unless `approved:true` **and** ≥1 accepted move) + the sole
+  disk-touching `applyReorgDecision` (fires `disk.applyReorgPlan` only when `willApply`). Plus
+  the offline mocks (`mockReorgFiles`, `mockReorgProposalJson`, `mockAiReorgApi`,
+  `mockUnconfiguredAiApi`). Never auto-applies — mirrors triage's `resolve*`/`apply*` seam.
+- `src/Visualize.tsx` / `src/Triage.tsx` / `src/Reorg.tsx` — presentational screens; `src/Panel.tsx`
+  — the shell (`useReducer` + async `disk.scan`) whose `TriageController` drives the
+  reclaim-sorted queue and whose `ReorgController` batches a proposal via `proposeReorg` on
+  mount, owns the tree-diff review state, and applies only the accepted moves through the
+  approval gate (a model rejection surfaces as "can't propose right now," not a crash); Summary
+  remains a placeholder. `src/index.tsx` default-exports the `AtlasPlugin` (`{ manifest, Panel }`)
+  and imports `styles.css` (scoped under `.atlas-disk-manager`).
 - `src/__tests__/` — manifest validation, treemap/layout/scope model, the reducer wiring, a
-  `react-dom/server` render of the scopes + treemap + iCloud aggregates, plus the Triage logic
-  (reclaim ordering, uninstall confirm gate, action→`disk.*` mapping) and its render (locked
-  L/M/R order + arrow iconography, evict disabled off-iCloud, app uninstaller panel).
+  `react-dom/server` render of the scopes + treemap + iCloud aggregates, the Triage logic
+  (reclaim ordering, uninstall confirm gate, action→`disk.*` mapping) and its render, plus the
+  reorg model (`reorg.test.ts`: parse/guard, `proposeReorg` batching + graceful rejection,
+  review reducer, and — the crux — approve-gates-apply / no move fires without approval) and the
+  Reorg screen render (`reorg.test.tsx`: tree diff, apply disabled at 0 accepted, loading/error).
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 
