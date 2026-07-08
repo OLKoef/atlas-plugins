@@ -1,5 +1,24 @@
 # Documentation log
 
+### 2026-07-08 — DISK6: Disk Manager Triage swipe UI
+
+Built the Tinder-style triage screen on top of the DISK5 navigation shell: one reclaim-sorted
+card at a time (preview + metadata) with the **locked** three actions — **Delete-left**
+(left-arrow → `disk.deleteToTrash`, recoverable), **Evict-middle** (up-arrow → `disk.evict`,
+iCloud-downloaded files only; disabled + "Evict (local only)" otherwise), **Keep-right**
+(right-arrow, advance only) — wired to the DISK4 `disk.*` mutation API. Apps get the full
+uninstaller treatment: their DISK3 leftovers (Application Support/Caches/Preferences) are
+surfaced with a confirm gate that keeps Delete disabled until checked (stronger than a plain
+swipe); DISK2 duplicates are pre-flagged in-queue; the queue is sorted by reclaim value
+(bytes × staleness — largest & least-recently-opened first). Logic (`triageModel.ts`) is split
+from the presentational `Triage.tsx` and the `Panel.tsx` `TriageController` so the ordering,
+the confirm gate, and each action's `disk.*` mapping unit-test with no new deps. Why: DISK6 is
+the reclaim workflow the Visualize treemap clicks into — the first place the plugin actually
+mutates disk — and it locks the button order/iconography the design review fixed.
+Files: `plugins/disk-manager/src/triageModel.ts`, `src/Triage.tsx`, `src/Panel.tsx`,
+`src/styles.css`, `src/__tests__/triage.test.ts`, `src/__tests__/triage.test.tsx`,
+`structure.md`, `documentation.md`.
+
 ### 2026-07-08 — DISK5: Disk Manager scaffold + manifest + Visualize screen
 
 Added `plugins/disk-manager`, a `type:"tool"` plugin built against the PL2 SDK: a manifest

@@ -15,7 +15,7 @@ atlas-plugins/
 ├── create-plugin/          # create-atlas-plugin — scaffolder CLI + template
 ├── plugins/                # authored / built plugins (one dir per plugin id)
 │   ├── example-widget/     # reference plugin: the create-plugin template, rendered
-│   └── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize screen first
+│   └── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage screens
 ├── scripts/                # release/catalog pipeline (build-catalog.mjs + lib/release.mjs)
 ├── .github/workflows/      # release-plugin.yml — CI on a `<id>-v<semver>` tag
 ├── structure.md            # this file
@@ -88,9 +88,9 @@ SDK-authored, Vite-built bundles.
 ### `plugins/disk-manager/` — Disk Manager (`type: "tool"`, DISK5+)
 
 Full-sidebar plugin that visualizes and reclaims disk space. DISK5 ships the scaffold,
-manifest, and the **Visualize** screen; DISK6–DISK8 add Triage, AI-reorg, and the
-session-summary/undo-log on top of the navigation model established here. Logic is split
-from React so it unit-tests in the shared node/vitest run with no new deps:
+manifest, and the **Visualize** screen; DISK6 adds the **Triage** swipe UI; DISK7–DISK8 add
+AI-reorg and the session-summary/undo-log on top of the navigation model established here.
+Logic is split from React so it unit-tests in the shared node/vitest run with no new deps:
 
 - `manifest.json` — `type:"tool"`, `minAtlasApi:1`, permissions
   `disk:read`/`disk:trash`/`disk:evict`/`disk:uninstall-app`/`disk:reorg` (DISK4); validated
@@ -104,12 +104,23 @@ from React so it unit-tests in the shared node/vitest run with no new deps:
   Visualize is the persistent shell, Reorg is a header action, a treemap node click sets a
   **scoped** `TriageTarget`, and the summary auto-appears at session end / via the
   running-tally pill.
-- `src/Visualize.tsx` — presentational Visualize screen; `src/Panel.tsx` — the shell
-  (`useReducer` + async `disk.scan`) with Triage/Reorg/Summary placeholders; `src/index.tsx`
-  default-exports the `AtlasPlugin` (`{ manifest, Panel }`) and imports `styles.css`
-  (scoped under `.atlas-disk-manager`).
-- `src/__tests__/` — manifest validation, treemap/layout/scope model, the reducer wiring,
-  and a `react-dom/server` render of the scopes + treemap + distinct iCloud aggregates.
+- `src/triageModel.ts` — framework-free Triage model (DISK6): the **locked** `TRIAGE_ACTIONS`
+  (Delete-left / Evict-middle / Keep-right) + `ARROW_ICONS` geometry, `canEvict` (downloaded
+  iCloud files only) / `evictLabel`, the reclaim-value ordering (`reclaimValue` =
+  bytes × staleness, `sortByReclaimValue` — largest & least-recently-opened first),
+  `resolveTriageAction` (swipe → `disk.*` op, with the app **uninstall confirm gate**),
+  `applyTriageDecision` (fires `deleteToTrash`/`evict`/`uninstallApp`), plus the mocked demo
+  queue + a succeeding `mockTriageDiskApi()`. Named `triageModel.ts` (not `triage.ts`) to
+  avoid a case-only clash with `Triage.tsx` on case-insensitive filesystems.
+- `src/Visualize.tsx` / `src/Triage.tsx` — presentational screens; `src/Panel.tsx` — the shell
+  (`useReducer` + async `disk.scan`) whose `TriageController` drives the reclaim-sorted queue
+  (fire the matching `disk.*` op per swipe, tally reclaimed bytes, auto-end at queue end);
+  Reorg/Summary remain placeholders. `src/index.tsx` default-exports the `AtlasPlugin`
+  (`{ manifest, Panel }`) and imports `styles.css` (scoped under `.atlas-disk-manager`).
+- `src/__tests__/` — manifest validation, treemap/layout/scope model, the reducer wiring, a
+  `react-dom/server` render of the scopes + treemap + iCloud aggregates, plus the Triage logic
+  (reclaim ordering, uninstall confirm gate, action→`disk.*` mapping) and its render (locked
+  L/M/R order + arrow iconography, evict disabled off-iCloud, app uninstaller panel).
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 
