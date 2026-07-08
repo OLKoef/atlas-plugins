@@ -9,7 +9,7 @@
     "plugins/*"
   ],
   "scripts": {
-    "build": "npm run build -w @atlas/plugin-sdk && npm run build -w @atlas/plugin-example-widget",
+    "build": "npm run build -w @atlas/plugin-sdk && npm run build -w @atlas/plugin-example-widget && npm run build -w @atlas/plugin-disk-manager",
     "build:sdk": "npm run build -w @atlas/plugin-sdk",
     "typecheck": "tsc -p sdk/tsconfig.json --noEmit",
     "catalog": "node scripts/build-catalog.mjs",

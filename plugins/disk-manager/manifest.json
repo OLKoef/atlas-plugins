@@ -1,0 +1,18 @@
+{
+  "id": "disk-manager",
+  "name": "Disk Manager",
+  "version": "0.1.0",
+  "type": "tool",
+  "entry": "index.js",
+  "styles": "styles.css",
+  "minAtlasApi": 1,
+  "description": "See what's taking up space across Local and iCloud, then reclaim it — a treemap you can click straight into a triage session.",
+  "author": "Atlas",
+  "permissions": [
+    "disk:read",
+    "disk:trash",
+    "disk:evict",
+    "disk:uninstall-app",
+    "disk:reorg"
+  ]
+}

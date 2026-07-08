@@ -1,0 +1,542 @@
+/*
+ * Disk Manager plugin styles (DISK5). Ported from DiskManagerApproved.html but scoped under
+ * `.atlas-disk-manager` (tokens + component classes) so the plugin can never clobber the
+ * host's global CSS. Only the Visualize screen + placeholder chrome is covered here; DISK6+
+ * add the triage/reorg/summary styling.
+ */
+
+.atlas-disk-manager {
+  --bg-primary: #f7f8fa;
+  --bg-secondary: #edeef2;
+  --bg-elevated: #ffffff;
+  --text-primary: #16181e;
+  --text-secondary: #565b6b;
+  --text-tertiary: #9da3b4;
+  --accent: #4c5de6;
+  --accent-hover: #3a4cd4;
+  --accent-subtle: rgba(76, 93, 230, 0.1);
+  --destructive: #d93f3f;
+  --destructive-subtle: rgba(217, 63, 63, 0.1);
+  --success: #2a9060;
+  --success-subtle: rgba(42, 144, 96, 0.1);
+  --warning: #b86a00;
+  --warning-subtle: rgba(184, 106, 0, 0.1);
+  --border: #dadce6;
+  --border-strong: #b8bbcc;
+  --shadow-1: 0 1px 3px rgba(22, 24, 30, 0.08), 0 1px 2px rgba(22, 24, 30, 0.04);
+  --shadow-2: 0 4px 12px rgba(22, 24, 30, 0.1), 0 2px 4px rgba(22, 24, 30, 0.06);
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', sans-serif;
+  --mono: 'SF Mono', ui-monospace, Menlo, monospace;
+  --size-body: 15px;
+  --size-callout: 13px;
+  --size-caption: 12px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+  --t: 140ms ease;
+  --tint-indigo: #4c5de6;
+  --tint-purple: #7c4dcc;
+  --tint-mint: #2a9060;
+  --tint-teal: #0095aa;
+  --tint-orange: #b86a00;
+  --tint-pink: #c2478b;
+  --tint-red: #d9573f;
+
+  font-family: var(--font);
+  color: var(--text-primary);
+  height: 100%;
+}
+
+[data-theme='dark'] .atlas-disk-manager {
+  --bg-primary: #161820;
+  --bg-secondary: #1e2030;
+  --bg-elevated: #252840;
+  --text-primary: #e8eaf2;
+  --text-secondary: #8b90a8;
+  --text-tertiary: #565b6b;
+  --accent: #7b8ef8;
+  --accent-hover: #8f9ff9;
+  --accent-subtle: rgba(123, 142, 248, 0.12);
+  --destructive: #f0554a;
+  --destructive-subtle: rgba(240, 85, 74, 0.12);
+  --success: #4ac48a;
+  --success-subtle: rgba(74, 196, 138, 0.12);
+  --warning: #f0a83a;
+  --warning-subtle: rgba(240, 168, 58, 0.12);
+  --border: #282b3e;
+  --border-strong: #3a3e55;
+  --tint-indigo: #7b8ef8;
+  --tint-purple: #9b7fe0;
+  --tint-mint: #4ac48a;
+  --tint-teal: #22b8cc;
+  --tint-orange: #f0a83a;
+  --tint-pink: #dc72ae;
+  --tint-red: #f0765f;
+}
+
+.atlas-disk-manager *,
+.atlas-disk-manager *::before,
+.atlas-disk-manager *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+.atlas-disk-manager .dm-page {
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--bg-primary);
+}
+
+.atlas-disk-manager .dm-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.atlas-disk-manager .dm-title-wrap h1 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+.atlas-disk-manager .dm-title-wrap p {
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+.atlas-disk-manager .dm-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.atlas-disk-manager .crumb-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 4px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  font-family: var(--font);
+  font-size: var(--size-callout);
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background var(--t);
+  margin-bottom: 8px;
+}
+.atlas-disk-manager .crumb-btn:hover {
+  background: var(--accent-subtle);
+}
+.atlas-disk-manager .crumb-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+.atlas-disk-manager .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  outline: none;
+  white-space: nowrap;
+  transition: background var(--t), border-color var(--t), color var(--t);
+}
+.atlas-disk-manager .btn-sm {
+  height: 28px;
+  padding: 0 12px;
+  font-size: var(--size-callout);
+}
+.atlas-disk-manager .btn-md {
+  height: 34px;
+  padding: 0 16px;
+  font-size: var(--size-callout);
+}
+.atlas-disk-manager .btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.atlas-disk-manager .btn-primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.atlas-disk-manager .btn-ghost {
+  background: none;
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+.atlas-disk-manager .btn-ghost:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+.atlas-disk-manager .btn svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.atlas-disk-manager .seg {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-secondary);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  width: fit-content;
+}
+.atlas-disk-manager .seg-btn {
+  height: 26px;
+  padding: 0 14px;
+  border-radius: 4px;
+  border: none;
+  background: none;
+  font-family: var(--font);
+  font-size: var(--size-callout);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--t);
+}
+.atlas-disk-manager .seg-btn:hover {
+  color: var(--text-primary);
+}
+.atlas-disk-manager .seg-btn.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-1);
+  font-weight: 600;
+}
+
+.atlas-disk-manager .tally-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  background: var(--success-subtle);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  color: var(--success);
+  font-size: var(--size-callout);
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all var(--t);
+}
+.atlas-disk-manager .tally-pill:hover {
+  border-color: var(--success);
+}
+.atlas-disk-manager .tally-pill svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.atlas-disk-manager .card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.atlas-disk-manager .dupe-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--warning-subtle);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+}
+.atlas-disk-manager .dupe-banner svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--warning);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.atlas-disk-manager .dupe-banner-text {
+  flex: 1;
+  font-size: var(--size-callout);
+  color: var(--text-primary);
+}
+.atlas-disk-manager .dupe-banner-text strong {
+  font-weight: 700;
+}
+
+.atlas-disk-manager .viz-body {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.atlas-disk-manager .viz-main {
+  flex: 1;
+  min-width: 0;
+}
+.atlas-disk-manager .viz-side {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.atlas-disk-manager .treemap-wrap {
+  position: relative;
+  width: 100%;
+  height: 420px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.atlas-disk-manager .tm-node {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--bg-primary);
+  padding: 8px 10px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: filter var(--t), transform var(--t);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  text-align: left;
+  font-family: var(--font);
+}
+.atlas-disk-manager .tm-node:hover {
+  filter: brightness(1.08);
+  z-index: 2;
+}
+.atlas-disk-manager .tm-name {
+  font-size: var(--size-callout);
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.25;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+.atlas-disk-manager .tm-size {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 1px;
+}
+.atlas-disk-manager .tm-count {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 1px;
+}
+.atlas-disk-manager .tm-node.tm-small .tm-size,
+.atlas-disk-manager .tm-node.tm-small .tm-count {
+  display: none;
+}
+.atlas-disk-manager .tm-node.tm-tiny .tm-name {
+  font-size: 10px;
+}
+
+.atlas-disk-manager .viz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.atlas-disk-manager .legend-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.atlas-disk-manager .legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.atlas-disk-manager .side-block-lbl {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 8px;
+}
+
+/* iCloud aggregate cards — deliberately distinct from the clickable treemap:
+   no hover affordance, a lock glyph, and a caption explaining why. */
+.atlas-disk-manager .agg-card {
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: default;
+}
+.atlas-disk-manager .agg-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.atlas-disk-manager .agg-card-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--size-callout);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.atlas-disk-manager .agg-card-name svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: var(--text-tertiary);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.atlas-disk-manager .agg-card-size {
+  font-size: var(--size-callout);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.atlas-disk-manager .agg-card-sub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.atlas-disk-manager .backup-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border);
+  opacity: 0.55;
+  font-size: var(--size-callout);
+  color: var(--text-tertiary);
+  cursor: default;
+}
+.atlas-disk-manager .backup-line svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  margin-right: 6px;
+}
+
+.atlas-disk-manager .reclaim-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: var(--size-callout);
+}
+.atlas-disk-manager .reclaim-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+.atlas-disk-manager .reclaim-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+.atlas-disk-manager .reclaim-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.atlas-disk-manager .reclaim-val {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+/* Placeholder chrome for the not-yet-built Triage / Reorg / Summary states. */
+.atlas-disk-manager .dm-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: var(--size-callout);
+  line-height: 1.5;
+}
+
+.atlas-disk-manager .summary-hero {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 22px 24px;
+  margin-bottom: 18px;
+}
+.atlas-disk-manager .summary-hero-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-lg);
+  background: var(--success-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.atlas-disk-manager .summary-hero-icon svg {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: var(--success);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.atlas-disk-manager .summary-hero-num {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.15;
+}
+.atlas-disk-manager .summary-hero-lbl {
+  font-size: var(--size-callout);
+  color: var(--text-tertiary);
+}
+.atlas-disk-manager .summary-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
