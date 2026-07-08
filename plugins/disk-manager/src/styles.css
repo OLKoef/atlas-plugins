@@ -1,8 +1,8 @@
 /*
  * Disk Manager plugin styles (DISK5). Ported from DiskManagerApproved.html but scoped under
  * `.atlas-disk-manager` (tokens + component classes) so the plugin can never clobber the
- * host's global CSS. Only the Visualize screen + placeholder chrome is covered here; DISK6+
- * add the triage/reorg/summary styling.
+ * host's global CSS. Covers the Visualize screen (DISK5) and the Triage swipe UI (DISK6);
+ * DISK7+ add the reorg/summary styling.
  */
 
 .atlas-disk-manager {
@@ -539,4 +539,274 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* ============================================================
+   TRIAGE (swipe UI) — DISK6. Ported from DiskManagerApproved.html.
+   ============================================================ */
+.atlas-disk-manager .triage-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 6px;
+}
+.atlas-disk-manager .triage-top {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.atlas-disk-manager .triage-progress {
+  font-size: var(--size-caption);
+  color: var(--text-tertiary);
+}
+.atlas-disk-manager .triage-progress b {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.atlas-disk-manager .badge {
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.atlas-disk-manager .badge-accent {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+.atlas-disk-manager .badge-warning {
+  background: var(--warning-subtle);
+  color: var(--warning);
+}
+
+.atlas-disk-manager .swipe-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+}
+.atlas-disk-manager .swipe-preview {
+  height: 220px;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.atlas-disk-manager .swipe-preview svg {
+  width: 56px;
+  height: 56px;
+  fill: none;
+  stroke: var(--text-tertiary);
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.atlas-disk-manager .swipe-badges {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 6px;
+}
+.atlas-disk-manager .swipe-badges.right {
+  left: auto;
+  right: 10px;
+}
+.atlas-disk-manager .swipe-body {
+  padding: 16px 18px;
+}
+.atlas-disk-manager .swipe-name {
+  font-size: var(--size-body);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+  word-break: break-word;
+}
+.atlas-disk-manager .swipe-kind {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+}
+.atlas-disk-manager .swipe-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  margin-bottom: 4px;
+}
+.atlas-disk-manager .meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.atlas-disk-manager .meta-item.full {
+  grid-column: 1 / -1;
+}
+.atlas-disk-manager .meta-key {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.atlas-disk-manager .meta-val {
+  font-size: var(--size-callout);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+.atlas-disk-manager .meta-val.full {
+  grid-column: 1 / -1;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  word-break: break-all;
+  font-weight: 400;
+}
+
+/* App-uninstaller leftover panel — deliberately heavier visual weight (warning tone,
+   explicit disclosure + a required confirm) than a normal file card. */
+.atlas-disk-manager .uninstall-panel {
+  margin-top: 4px;
+  padding: 12px 14px;
+  background: var(--warning-subtle);
+  border-top: 1px solid var(--border);
+}
+.atlas-disk-manager .uninstall-hd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--warning);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+.atlas-disk-manager .uninstall-hd svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.atlas-disk-manager .leftover-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 6px 0;
+}
+.atlas-disk-manager .leftover-meta {
+  flex: 1;
+  min-width: 0;
+}
+.atlas-disk-manager .leftover-path {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+.atlas-disk-manager .leftover-size {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+.atlas-disk-manager .uninstall-confirm-gate {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  cursor: pointer;
+}
+.atlas-disk-manager .uninstall-confirm-gate input {
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--warning);
+}
+
+.atlas-disk-manager .swipe-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 16px 18px 20px;
+  border-top: 1px solid var(--border);
+  width: 100%;
+  max-width: 520px;
+}
+.atlas-disk-manager .swipe-action-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.atlas-disk-manager .swipe-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--border);
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--t);
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+.atlas-disk-manager .swipe-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.atlas-disk-manager .swipe-btn.keep {
+  color: var(--success);
+}
+.atlas-disk-manager .swipe-btn.keep:hover {
+  background: var(--success-subtle);
+  border-color: var(--success);
+}
+.atlas-disk-manager .swipe-btn.delete {
+  color: var(--destructive);
+  width: 60px;
+  height: 60px;
+}
+.atlas-disk-manager .swipe-btn.delete:hover:not(:disabled) {
+  background: var(--destructive-subtle);
+  border-color: var(--destructive);
+}
+.atlas-disk-manager .swipe-btn.evict {
+  color: var(--accent);
+}
+.atlas-disk-manager .swipe-btn.evict:hover:not(:disabled) {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+}
+.atlas-disk-manager .swipe-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.atlas-disk-manager .swipe-btn-lbl {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-align: center;
+  margin-top: 4px;
 }

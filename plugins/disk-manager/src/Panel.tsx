@@ -23,6 +23,15 @@ import {
 } from './navigation';
 import type { TriageTarget } from './navigation';
 import { Visualize } from './Visualize';
+import { Triage } from './Triage';
+import {
+  TRIAGE_NOW_MS,
+  applyTriageDecision,
+  mockTriageQueue,
+  resolveTriageAction,
+  sortByReclaimValue,
+} from './triageModel';
+import type { TriageActionId } from './triageModel';
 
 function BackToVisualize({ onBack }: { onBack(): void }) {
   return (
@@ -35,46 +44,69 @@ function BackToVisualize({ onBack }: { onBack(): void }) {
   );
 }
 
-/** Placeholder for the swipe-triage UI (DISK6). Demonstrates the scoped target + nav model. */
-function TriagePlaceholder({
+/**
+ * The swipe-triage controller (DISK6). Owns the per-session state — the reclaim-sorted queue,
+ * the current card index, and the per-card app-uninstall confirm — over the pure triage model.
+ * A swipe resolves to a {@link resolveTriageAction} decision, fires the matching `disk.*`
+ * mutation via {@link applyTriageDecision}, records the reclaimed bytes, then advances; the
+ * queue running dry auto-ends the session (→ summary). Mounted keyed by target so each new
+ * session starts fresh.
+ */
+function TriageController({
+  api,
   target,
   freedBytes,
   onBack,
   onEndSession,
   onOpenSummary,
+  onRecordFreed,
 }: {
+  api: AtlasPluginApi;
   target: TriageTarget | null;
   freedBytes: number;
   onBack(): void;
   onEndSession(): void;
   onOpenSummary(): void;
+  onRecordFreed(bytes: number): void;
 }) {
+  const queue = useMemo(() => sortByReclaimValue(mockTriageQueue(), TRIAGE_NOW_MS), []);
+  const [index, setIndex] = useState(0);
+  const [appConfirmed, setAppConfirmed] = useState(false);
+  const item = index < queue.length ? queue[index] : null;
+
+  const handleAction = (action: TriageActionId) => {
+    if (!item) return;
+    const decision = resolveTriageAction(item, action, { confirmed: appConfirmed });
+    // Blocked = a disabled button (evict on a non-iCloud file) or an unconfirmed app delete;
+    // both are UI-guarded already, so just no-op here.
+    if (decision.blocked) return;
+    if (decision.op) {
+      applyTriageDecision(api, decision).catch((e: unknown) => {
+        api.ui?.toast?.('error', 'Action failed', e instanceof Error ? e.message : String(e));
+      });
+    }
+    if (decision.reclaimBytes > 0) onRecordFreed(decision.reclaimBytes);
+    setAppConfirmed(false);
+    const next = index + 1;
+    if (next >= queue.length) onEndSession();
+    else setIndex(next);
+  };
+
   return (
     <div className="atlas-disk-manager">
-      <div className="dm-page">
-        <BackToVisualize onBack={onBack} />
-        <div className="dm-header">
-          <div className="dm-title-wrap">
-            <h1 style={{ fontSize: 20 }}>Triage — {target?.label ?? 'Everything'}</h1>
-            <p>Sorted by reclaim value — largest &amp; least-recently-opened first.</p>
-          </div>
-          <div className="dm-header-actions">
-            <button type="button" className="tally-pill" onClick={onOpenSummary}>
-              Space freed: {formatBytes(freedBytes)}
-            </button>
-          </div>
-        </div>
-        <div className="dm-placeholder">
-          <p>
-            Scoped triage session for <strong>{target?.label ?? 'this scope'}</strong>
-            {target ? ` (${formatBytes(target.bytes)} in scope)` : ''}. The keep / delete /
-            evict swipe UI lands in DISK6.
-          </p>
-          <button type="button" className="btn btn-md btn-primary" onClick={onEndSession}>
-            End session
-          </button>
-        </div>
-      </div>
+      <Triage
+        item={item}
+        index={index}
+        total={queue.length}
+        freedBytes={freedBytes}
+        target={target}
+        appConfirmed={appConfirmed}
+        onToggleConfirm={setAppConfirmed}
+        onAction={handleAction}
+        onBack={onBack}
+        onOpenSummary={onOpenSummary}
+        nowMs={TRIAGE_NOW_MS}
+      />
     </div>
   );
 }
@@ -167,12 +199,15 @@ export function DiskManagerPanel({ api }: { api: AtlasPluginApi }) {
 
   if (state.view === 'triage') {
     return (
-      <TriagePlaceholder
+      <TriageController
+        key={state.triageTarget?.root ?? 'all'}
+        api={api}
         target={state.triageTarget}
         freedBytes={state.freedBytes}
         onBack={() => dispatch({ type: 'backToVisualize' })}
         onEndSession={() => dispatch({ type: 'endSession' })}
         onOpenSummary={() => dispatch({ type: 'openSummary' })}
+        onRecordFreed={(bytes) => dispatch({ type: 'recordFreed', bytes })}
       />
     );
   }
