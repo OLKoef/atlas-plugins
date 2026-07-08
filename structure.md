@@ -14,7 +14,8 @@ atlas-plugins/
 ├── sdk/                    # @atlas/plugin-sdk — the typed plugin API + Vite config
 ├── create-plugin/          # create-atlas-plugin — scaffolder CLI + template
 ├── plugins/                # authored / built plugins (one dir per plugin id)
-│   └── example-widget/     # reference plugin: the create-plugin template, rendered
+│   ├── example-widget/     # reference plugin: the create-plugin template, rendered
+│   └── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize screen first
 ├── scripts/                # release/catalog pipeline (build-catalog.mjs + lib/release.mjs)
 ├── .github/workflows/      # release-plugin.yml — CI on a `<id>-v<semver>` tag
 ├── structure.md            # this file
@@ -29,10 +30,11 @@ root `node_modules` and imports the built `@atlas/plugin-sdk`.
 
 `npm run build && npm test` (defined in the root `package.json`):
 
-- `build` → `tsc` builds `@atlas/plugin-sdk` to `sdk/dist`, then `vite build` builds
-  `@atlas/plugin-example-widget` to `plugins/example-widget/dist/index.js`.
-- `test` → `vitest run` over `sdk/src/**/*.test.ts`, `create-plugin/**/*.test.mjs`, and
-  `scripts/**/*.test.mjs`.
+- `build` → `tsc` builds `@atlas/plugin-sdk` to `sdk/dist`, then `vite build` builds each
+  plugin (`@atlas/plugin-example-widget`, `@atlas/plugin-disk-manager`) to its `dist/index.js`.
+- `test` → `vitest run` over `sdk/src/**/*.test.ts`, `create-plugin/**/*.test.mjs`,
+  `scripts/**/*.test.mjs`, and `plugins/**/src/**/*.test.{ts,tsx}` (JSX rendered with the
+  automatic runtime; node env, no DOM lib).
 
 ## `sdk/` — `@atlas/plugin-sdk`
 
@@ -82,6 +84,32 @@ Vite into a plugin's graph).
 One directory per plugin id. `example-widget` is the reference render of the template and
 the build-gate proof. Real marketplace plugins (e.g. Disk Manager, DISK5+) land here as
 SDK-authored, Vite-built bundles.
+
+### `plugins/disk-manager/` — Disk Manager (`type: "tool"`, DISK5+)
+
+Full-sidebar plugin that visualizes and reclaims disk space. DISK5 ships the scaffold,
+manifest, and the **Visualize** screen; DISK6–DISK8 add Triage, AI-reorg, and the
+session-summary/undo-log on top of the navigation model established here. Logic is split
+from React so it unit-tests in the shared node/vitest run with no new deps:
+
+- `manifest.json` — `type:"tool"`, `minAtlasApi:1`, permissions
+  `disk:read`/`disk:trash`/`disk:evict`/`disk:uninstall-app`/`disk:reorg` (DISK4); validated
+  by the SDK's `parseManifest` in `src/__tests__/manifest.test.ts`.
+- `src/model.ts` — framework-free: `DiskScope` (Local/iCloud/Both), `buildTreemapNodes` +
+  `squarify` layout (area exactly proportional to bytes) from the DISK1 `disk.scan`
+  aggregates, `buildVisualizeModel`, the iCloud split (Drive = browsable treemap;
+  Photos/Mail = aggregate-size-only, `browsable:false`/`swipeable:false`; Backup = read-only
+  figure only if available), plus mocked `disk.*` data + `mockDiskApi()` (no live iCloud).
+- `src/navigation.ts` — the locked navigation model as a pure reducer (`reduceDiskManager`):
+  Visualize is the persistent shell, Reorg is a header action, a treemap node click sets a
+  **scoped** `TriageTarget`, and the summary auto-appears at session end / via the
+  running-tally pill.
+- `src/Visualize.tsx` — presentational Visualize screen; `src/Panel.tsx` — the shell
+  (`useReducer` + async `disk.scan`) with Triage/Reorg/Summary placeholders; `src/index.tsx`
+  default-exports the `AtlasPlugin` (`{ manifest, Panel }`) and imports `styles.css`
+  (scoped under `.atlas-disk-manager`).
+- `src/__tests__/` — manifest validation, treemap/layout/scope model, the reducer wiring,
+  and a `react-dom/server` render of the scopes + treemap + distinct iCloud aggregates.
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 

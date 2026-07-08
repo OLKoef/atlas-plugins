@@ -1,5 +1,23 @@
 # Documentation log
 
+### 2026-07-08 — DISK5: Disk Manager scaffold + manifest + Visualize screen
+
+Added `plugins/disk-manager`, a `type:"tool"` plugin built against the PL2 SDK: a manifest
+(`minAtlasApi:1` + the DISK4 `disk:read`/`disk:trash`/`disk:evict`/`disk:uninstall-app`/`disk:reorg`
+permissions) and the **Visualize** screen per `DiskManagerApproved.html` — a Local/iCloud/Both
+scope selector, a squarified treemap built from the DISK1 `disk.scan` aggregates, the iCloud split
+(Drive browsable vs Photos/Mail aggregate-size-only/not-swipeable vs Backup read-only figure), and
+a node click that opens a *scoped* triage target. The logic (scopes/treemap/layout in `model.ts`,
+the locked navigation model as a reducer in `navigation.ts`) is split from React so it unit-tests
+in the existing node/vitest run with no new deps; `Visualize.tsx`/`Panel.tsx` render it, with
+Triage/Reorg/Summary left as placeholders for DISK6–DISK8. Why: DISK5 is the first real
+marketplace plugin the SDK scaffolds for and establishes the Disk Manager's persistent-shell
+navigation the later DISK tickets build on. Wired the root `build` and the vitest `include` to
+cover `plugins/**`.
+Files: `plugins/disk-manager/**` (manifest, package/tsconfig/vite config, `src/model.ts`,
+`src/navigation.ts`, `src/Visualize.tsx`, `src/Panel.tsx`, `src/index.tsx`, `src/styles.css`,
+`src/__tests__/*`), `package.json`, `vitest.config.ts`, `structure.md`, `documentation.md`.
+
 ### 2026-07-06 — PL15: catalog build/publish pipeline (CI)
 
 Added the release-tag → marketplace-catalog pipeline. The SDK gained a `catalog.ts` module
