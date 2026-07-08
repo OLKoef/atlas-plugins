@@ -1,5 +1,20 @@
 # Documentation log
 
+### 2026-07-08 — DISK9: Publish Disk Manager v1 to the catalog
+
+Bumped Disk Manager to `1.0.0` and published its first `catalog.json` entry, making it the first
+real consumer of the PL5 `parseCatalog` acceptance seam and the PL15 release pipeline (both had
+only been exercised against fixture zips before). The entry was produced by the pipeline itself
+and committed in the exact canonical bytes `serializeCatalog` emits, so the `disk-manager-v1.0.0`
+tag-push regeneration is a no-op diff; `package-lock.json` was synced to include the
+`plugins/disk-manager` workspace so the release workflow's `npm ci` resolves it. New tests pack
+the real plugin and assert the produced entry is `parseCatalog`-valid with a `sha256` matching the
+packed zip, and that the committed `catalog.json` is schema-valid and canonical. Why: this is the
+mechanically-gatable half of shipping Disk Manager to the marketplace — uploading the release
+asset and real install/hot-load/update verification stay the tag-push CI + parked human step.
+Files: plugins/disk-manager/manifest.json, plugins/disk-manager/package.json, catalog.json,
+package-lock.json, scripts/build-catalog.test.mjs, structure.md, documentation.md.
+
 ### 2026-07-08 — DISK8: Disk Manager session tracking + per-action undo log
 
 Added the **Session summary + per-action undo log** on top of the DISK5 navigation shell,
