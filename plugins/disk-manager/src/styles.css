@@ -810,3 +810,158 @@
   text-align: center;
   margin-top: 4px;
 }
+
+/* ============================================================
+   AI-REORG REVIEW (DISK7) — tree diff (proposed vs. current)
+   Ported from DiskManagerApproved.html §AI-reorg, scoped under
+   `.atlas-disk-manager`. The plan is never applied until the
+   user approves; these are review-only affordances.
+   ============================================================ */
+.atlas-disk-manager .reorg-provider {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.atlas-disk-manager .reorg-provider .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
+.atlas-disk-manager .diff-card {
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.atlas-disk-manager .diff-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+.atlas-disk-manager .diff-hd-title {
+  font-size: var(--size-callout);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.atlas-disk-manager .diff-hd-actions {
+  display: flex;
+  gap: 8px;
+}
+.atlas-disk-manager .diff-hd-actions button {
+  font-size: 11px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  font-family: var(--font);
+  cursor: pointer;
+  font-weight: 600;
+}
+.atlas-disk-manager .diff-hd-actions button:hover {
+  text-decoration: underline;
+}
+
+.atlas-disk-manager .diff-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  font-size: var(--size-callout);
+}
+.atlas-disk-manager .diff-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+.atlas-disk-manager .diff-row.rejected {
+  opacity: 0.45;
+}
+.atlas-disk-manager .diff-paths {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.atlas-disk-manager .diff-from {
+  color: var(--text-tertiary);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+.atlas-disk-manager .diff-arrow {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+.atlas-disk-manager .diff-to {
+  color: var(--success);
+  font-weight: 600;
+}
+.atlas-disk-manager .diff-to[data-adjusted='true'] {
+  color: var(--accent);
+}
+.atlas-disk-manager .diff-edit {
+  flex: 1;
+  min-width: 140px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+.atlas-disk-manager .diff-count {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.atlas-disk-manager .diff-adjust {
+  font-size: 11px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  font-family: var(--font);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.atlas-disk-manager .diff-adjust:hover {
+  text-decoration: underline;
+}
+.atlas-disk-manager .diff-noop {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.atlas-disk-manager .diff-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+.atlas-disk-manager .diff-summary-count {
+  font-size: var(--size-callout);
+  color: var(--text-secondary);
+}
+.atlas-disk-manager .diff-summary-count b {
+  color: var(--text-primary);
+}
+.atlas-disk-manager .diff-summary-actions {
+  display: flex;
+  gap: 8px;
+}

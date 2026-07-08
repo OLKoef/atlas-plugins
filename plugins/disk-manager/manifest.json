@@ -13,6 +13,7 @@
     "disk:trash",
     "disk:evict",
     "disk:uninstall-app",
-    "disk:reorg"
+    "disk:reorg",
+    "ai:chat"
   ]
 }

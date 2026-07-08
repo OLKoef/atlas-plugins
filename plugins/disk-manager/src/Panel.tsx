@@ -24,6 +24,8 @@ import {
 import type { TriageTarget } from './navigation';
 import { Visualize } from './Visualize';
 import { Triage } from './Triage';
+import { Reorg } from './Reorg';
+import type { ReorgStatus } from './Reorg';
 import {
   TRIAGE_NOW_MS,
   applyTriageDecision,
@@ -32,17 +34,20 @@ import {
   sortByReclaimValue,
 } from './triageModel';
 import type { TriageActionId } from './triageModel';
-
-function BackToVisualize({ onBack }: { onBack(): void }) {
-  return (
-    <button type="button" className="crumb-btn" onClick={onBack}>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <polyline points="15 18 9 12 15 6" />
-      </svg>
-      Visualize
-    </button>
-  );
-}
+import {
+  DEFAULT_REORG_PROVIDER,
+  REORG_SOURCE_ROOT,
+  adjustReorgMove,
+  applyReorgDecision,
+  buildReorgReview,
+  mockReorgFiles,
+  proposeReorg,
+  reorgScope,
+  resolveReorgApply,
+  setAllReorgMoves,
+  toggleReorgMove,
+} from './reorgModel';
+import type { ReorgReviewState } from './reorgModel';
 
 /**
  * The swipe-triage controller (DISK6). Owns the per-session state — the reclaim-sorted queue,
@@ -111,22 +116,90 @@ function TriageController({
   );
 }
 
-/** Placeholder for the AI-reorg review (DISK7). */
-function ReorgPlaceholder({ onBack }: { onBack(): void }) {
+/**
+ * The AI-reorg review controller (DISK7). On mount it batches file metadata through the
+ * configured model (`ai.chat`) to PROPOSE a folder structure, then owns the tree-diff review
+ * state (accept/reject/adjust). Applying goes through {@link resolveReorgApply} with explicit
+ * approval — nothing is ever auto-applied, and only the accepted moves reach
+ * `disk.applyReorgPlan`. A model rejection surfaces as "can't propose right now," not a crash.
+ */
+function ReorgController({
+  api,
+  onBack,
+  onRecordFreed,
+}: {
+  api: AtlasPluginApi;
+  onBack(): void;
+  onRecordFreed(bytes: number): void;
+}) {
+  const [status, setStatus] = useState<ReorgStatus>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
+  const [review, setReview] = useState<ReorgReviewState | null>(null);
+  const [applying, setApplying] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    proposeReorg(api, { files: mockReorgFiles(), sourceRoot: REORG_SOURCE_ROOT })
+      .then((proposal) => {
+        if (!live) return;
+        setReview(buildReorgReview(proposal));
+        setStatus('ready');
+      })
+      .catch((e: unknown) => {
+        if (!live) return;
+        setErrorMessage(
+          `Couldn't propose a reorganization right now — ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
+        setStatus('error');
+      });
+    return () => {
+      live = false;
+    };
+  }, [api]);
+
+  const handleApply = () => {
+    if (!review || applying) return;
+    // The approval gate: this is the ONLY place we pass `approved: true`, and it only ever
+    // runs from the explicit "Apply accepted changes" click. A blocked decision fires nothing.
+    const decision = resolveReorgApply(review, {
+      approved: true,
+      scope: reorgScope(review.sourceRoot),
+    });
+    if (!decision.willApply) return;
+    setApplying(true);
+    applyReorgDecision(api, decision)
+      .then((result) => {
+        if (result) {
+          onRecordFreed(result.reclaimedBytes);
+          api.ui?.toast?.('success', 'Reorganized', result.summary);
+        }
+        onBack();
+      })
+      .catch((e: unknown) => {
+        api.ui?.toast?.('error', 'Reorg failed', e instanceof Error ? e.message : String(e));
+        setApplying(false);
+      });
+  };
+
   return (
     <div className="atlas-disk-manager">
-      <div className="dm-page">
-        <BackToVisualize onBack={onBack} />
-        <div className="dm-header">
-          <div className="dm-title-wrap">
-            <h1 style={{ fontSize: 20 }}>AI-reorganization review</h1>
-            <p>A proposed plan, not applied yet — review and adjust each move before approving.</p>
-          </div>
-        </div>
-        <div className="dm-placeholder">
-          <p>The LM Studio-proposed folder plan (tree diff, review/adjust/approve) lands in DISK7.</p>
-        </div>
-      </div>
+      <Reorg
+        status={status}
+        review={review}
+        provider={DEFAULT_REORG_PROVIDER}
+        errorMessage={errorMessage}
+        applying={applying}
+        onToggle={(id, accepted) =>
+          setReview((s) => (s ? toggleReorgMove(s, id, accepted) : s))
+        }
+        onSetAll={(accepted) => setReview((s) => (s ? setAllReorgMoves(s, accepted) : s))}
+        onAdjust={(id, to) => setReview((s) => (s ? adjustReorgMove(s, id, to) : s))}
+        onApply={handleApply}
+        onCancel={onBack}
+        onBack={onBack}
+      />
     </div>
   );
 }
@@ -212,7 +285,13 @@ export function DiskManagerPanel({ api }: { api: AtlasPluginApi }) {
     );
   }
   if (state.view === 'reorg') {
-    return <ReorgPlaceholder onBack={() => dispatch({ type: 'backToVisualize' })} />;
+    return (
+      <ReorgController
+        api={api}
+        onBack={() => dispatch({ type: 'backToVisualize' })}
+        onRecordFreed={(bytes) => dispatch({ type: 'recordFreed', bytes })}
+      />
+    );
   }
   if (state.view === 'summary') {
     return (

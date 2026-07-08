@@ -3,9 +3,9 @@ import { parseManifest } from '@atlas/plugin-sdk';
 import manifest from '../../manifest.json';
 
 /**
- * The manifest must be a valid `type: "tool"` manifest that declares exactly the DISK4
- * permissions — validated through the SDK's own `parseManifest` (the same seam the
- * Dashboard registry uses).
+ * The manifest must be a valid `type: "tool"` manifest that declares exactly the DISK4 disk
+ * permissions plus the DISK7 `ai:chat` (used by the AI-reorg proposal) — validated through
+ * the SDK's own `parseManifest` (the same seam the Dashboard registry uses).
  */
 describe('disk-manager manifest', () => {
   it('validates against the SDK manifest parser', () => {
@@ -21,7 +21,7 @@ describe('disk-manager manifest', () => {
     expect(m.styles).toBe('styles.css');
   });
 
-  it('declares the five DISK4 disk permissions', () => {
+  it('declares the five DISK4 disk permissions plus DISK7 ai:chat', () => {
     const m = parseManifest(manifest);
     expect(m.permissions).toEqual([
       'disk:read',
@@ -29,6 +29,7 @@ describe('disk-manager manifest', () => {
       'disk:evict',
       'disk:uninstall-app',
       'disk:reorg',
+      'ai:chat',
     ]);
   });
 });
