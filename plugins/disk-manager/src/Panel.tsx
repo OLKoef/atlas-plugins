@@ -11,7 +11,6 @@ import { useEffect, useMemo, useReducer, useState } from 'react';
 import type { AtlasPluginApi } from '@atlas/plugin-sdk';
 import {
   buildVisualizeModel,
-  formatBytes,
   loadVisualizeSources,
   mockDuplicateSummary,
 } from './model';
@@ -26,6 +25,16 @@ import { Visualize } from './Visualize';
 import { Triage } from './Triage';
 import { Reorg } from './Reorg';
 import type { ReorgStatus } from './Reorg';
+import { Summary } from './Summary';
+import {
+  applyUndo,
+  loadSessionLog,
+  planUndo,
+  reorgActionInput,
+  saveSessionLog,
+  triageActionInput,
+} from './sessionModel';
+import type { RecordActionInput, UndoLogEntry } from './sessionModel';
 import {
   TRIAGE_NOW_MS,
   applyTriageDecision,
@@ -53,9 +62,9 @@ import type { ReorgReviewState } from './reorgModel';
  * The swipe-triage controller (DISK6). Owns the per-session state — the reclaim-sorted queue,
  * the current card index, and the per-card app-uninstall confirm — over the pure triage model.
  * A swipe resolves to a {@link resolveTriageAction} decision, fires the matching `disk.*`
- * mutation via {@link applyTriageDecision}, records the reclaimed bytes, then advances; the
- * queue running dry auto-ends the session (→ summary). Mounted keyed by target so each new
- * session starts fresh.
+ * mutation via {@link applyTriageDecision}, records the action in the DISK8 undo log (a Keep
+ * logs too, for its count), then advances; the queue running dry auto-ends the session
+ * (→ summary). Mounted keyed by target so each new session starts fresh.
  */
 function TriageController({
   api,
@@ -64,7 +73,7 @@ function TriageController({
   onBack,
   onEndSession,
   onOpenSummary,
-  onRecordFreed,
+  onLogAction,
 }: {
   api: AtlasPluginApi;
   target: TriageTarget | null;
@@ -72,7 +81,7 @@ function TriageController({
   onBack(): void;
   onEndSession(): void;
   onOpenSummary(): void;
-  onRecordFreed(bytes: number): void;
+  onLogAction(input: RecordActionInput): void;
 }) {
   const queue = useMemo(() => sortByReclaimValue(mockTriageQueue(), TRIAGE_NOW_MS), []);
   const [index, setIndex] = useState(0);
@@ -83,14 +92,15 @@ function TriageController({
     if (!item) return;
     const decision = resolveTriageAction(item, action, { confirmed: appConfirmed });
     // Blocked = a disabled button (evict on a non-iCloud file) or an unconfirmed app delete;
-    // both are UI-guarded already, so just no-op here.
+    // both are UI-guarded already, so just no-op here (nothing recorded, no advance).
     if (decision.blocked) return;
     if (decision.op) {
       applyTriageDecision(api, decision).catch((e: unknown) => {
         api.ui?.toast?.('error', 'Action failed', e instanceof Error ? e.message : String(e));
       });
     }
-    if (decision.reclaimBytes > 0) onRecordFreed(decision.reclaimBytes);
+    // Record every resolved swipe (Keep included) in the undo log; the tally derives from it.
+    onLogAction(triageActionInput(item, decision, Date.now()));
     setAppConfirmed(false);
     const next = index + 1;
     if (next >= queue.length) onEndSession();
@@ -126,11 +136,11 @@ function TriageController({
 function ReorgController({
   api,
   onBack,
-  onRecordFreed,
+  onLogAction,
 }: {
   api: AtlasPluginApi;
   onBack(): void;
-  onRecordFreed(bytes: number): void;
+  onLogAction(input: RecordActionInput): void;
 }) {
   const [status, setStatus] = useState<ReorgStatus>('loading');
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
@@ -172,7 +182,8 @@ function ReorgController({
     applyReorgDecision(api, decision)
       .then((result) => {
         if (result) {
-          onRecordFreed(result.reclaimedBytes);
+          // Log the whole reorg batch — one undoable entry carrying its moves (reverse-move).
+          onLogAction(reorgActionInput(result, Date.now()));
           api.ui?.toast?.('success', 'Reorganized', result.summary);
         }
         onBack();
@@ -204,48 +215,11 @@ function ReorgController({
   );
 }
 
-/** Placeholder for the Session summary + undo log (DISK8). */
-function SummaryPlaceholder({
-  freedBytes,
-  onBack,
-}: {
-  freedBytes: number;
-  onBack(): void;
-}) {
-  return (
-    <div className="atlas-disk-manager">
-      <div className="dm-page">
-        <div className="dm-header">
-          <div className="dm-title-wrap">
-            <h1 style={{ fontSize: 20 }}>Session summary</h1>
-            <p>Every action can be undone individually — the undo log lands in DISK8.</p>
-          </div>
-        </div>
-        <div className="card summary-hero">
-          <div className="summary-hero-icon">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
-          </div>
-          <div>
-            <div className="summary-hero-num">{formatBytes(freedBytes)}</div>
-            <div className="summary-hero-lbl">freed this session</div>
-          </div>
-        </div>
-        <div className="summary-footer">
-          <button type="button" className="btn btn-md btn-ghost" onClick={onBack}>
-            Back to Visualize
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function DiskManagerPanel({ api }: { api: AtlasPluginApi }) {
   const [state, dispatch] = useReducer(reduceDiskManager, initialDiskManagerState);
   const [sources, setSources] = useState<VisualizeSources | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   const duplicates: DuplicateSummary = useMemo(() => mockDuplicateSummary(), []);
 
   useEffect(() => {
@@ -261,6 +235,54 @@ export function DiskManagerPanel({ api }: { api: AtlasPluginApi }) {
       live = false;
     };
   }, [api]);
+
+  // Hydrate the persisted undo log (DISK8) once, so a reload keeps the tally + undo affordance.
+  useEffect(() => {
+    let live = true;
+    if (!api.storage) {
+      setHydrated(true);
+      return;
+    }
+    loadSessionLog(api.storage)
+      .then((log) => {
+        if (live) dispatch({ type: 'hydrateLog', log });
+      })
+      .catch(() => {
+        /* a bad/absent value already parses to an empty log; nothing to surface. */
+      })
+      .finally(() => {
+        if (live) setHydrated(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, [api]);
+
+  // Persist the log whenever it changes — but not before hydration, or we'd clobber the
+  // stored value with the initial empty log on mount.
+  useEffect(() => {
+    if (!hydrated || !api.storage) return;
+    saveSessionLog(api.storage, state.log).catch(() => {
+      /* best-effort persistence; a failed flush is non-fatal to the session. */
+    });
+  }, [api, hydrated, state.log]);
+
+  const undoAction = (entry: UndoLogEntry) => {
+    const plan = planUndo(entry);
+    // Reflect the undo in the model immediately (drops it from the tally + counts)…
+    dispatch({ type: 'undoLogEntry', id: entry.id });
+    // …then physically reverse it where an API primitive exists (a reorg reverse-move);
+    // trash / redownload have none, so we just tell the user how to finish.
+    if (plan.disk) {
+      applyUndo(api, plan, reorgScope())
+        .then(() => api.ui?.toast?.('success', 'Undone', plan.message))
+        .catch((e: unknown) => {
+          api.ui?.toast?.('error', 'Undo failed', e instanceof Error ? e.message : String(e));
+        });
+    } else {
+      api.ui?.toast?.('info', 'Undo', plan.message);
+    }
+  };
 
   const model = useMemo(
     () => (sources ? buildVisualizeModel(state.scope, sources) : null),
@@ -280,7 +302,7 @@ export function DiskManagerPanel({ api }: { api: AtlasPluginApi }) {
         onBack={() => dispatch({ type: 'backToVisualize' })}
         onEndSession={() => dispatch({ type: 'endSession' })}
         onOpenSummary={() => dispatch({ type: 'openSummary' })}
-        onRecordFreed={(bytes) => dispatch({ type: 'recordFreed', bytes })}
+        onLogAction={(input) => dispatch({ type: 'logAction', input })}
       />
     );
   }
@@ -289,14 +311,15 @@ export function DiskManagerPanel({ api }: { api: AtlasPluginApi }) {
       <ReorgController
         api={api}
         onBack={() => dispatch({ type: 'backToVisualize' })}
-        onRecordFreed={(bytes) => dispatch({ type: 'recordFreed', bytes })}
+        onLogAction={(input) => dispatch({ type: 'logAction', input })}
       />
     );
   }
   if (state.view === 'summary') {
     return (
-      <SummaryPlaceholder
-        freedBytes={state.freedBytes}
+      <Summary
+        log={state.log}
+        onUndo={undoAction}
         onBack={() => dispatch({ type: 'backToVisualize' })}
       />
     );

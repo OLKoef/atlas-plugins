@@ -6,6 +6,7 @@ import {
   triageTargetFromNode,
 } from '../navigation';
 import type { DiskManagerState } from '../navigation';
+import type { RecordActionInput } from '../sessionModel';
 
 function sources() {
   return {
@@ -73,17 +74,45 @@ describe('locked navigation model', () => {
   });
 
   it('back returns to the persistent shell but keeps the running tally', () => {
-    let s = reduceDiskManager(initialDiskManagerState, { type: 'recordFreed', bytes: 1000 });
+    let s = reduceDiskManager(initialDiskManagerState, {
+      type: 'logAction',
+      input: freed('delete', 1000),
+    });
     s = reduceDiskManager(s, { type: 'openSummary' });
     s = reduceDiskManager(s, { type: 'backToVisualize' });
     expect(s.view).toBe('visualize');
     expect(s.freedBytes).toBe(1000);
   });
 
-  it('recordFreed accumulates and ignores negatives', () => {
-    let s = reduceDiskManager(initialDiskManagerState, { type: 'recordFreed', bytes: 500 });
-    s = reduceDiskManager(s, { type: 'recordFreed', bytes: -9 });
-    s = reduceDiskManager(s, { type: 'recordFreed', bytes: 250 });
+  it('logAction accumulates freed bytes; undoing one action lowers the tally (DISK8)', () => {
+    let s = reduceDiskManager(initialDiskManagerState, {
+      type: 'logAction',
+      input: freed('delete', 500),
+    });
+    s = reduceDiskManager(s, { type: 'logAction', input: freed('evict', 250) });
     expect(s.freedBytes).toBe(750);
+    expect(s.log.entries).toHaveLength(2);
+
+    // Undo the first action — the running total drops by exactly that action's bytes.
+    s = reduceDiskManager(s, { type: 'undoLogEntry', id: s.log.entries[0].id });
+    expect(s.freedBytes).toBe(250);
+
+    // Undoing again is a no-op (idempotent).
+    s = reduceDiskManager(s, { type: 'undoLogEntry', id: s.log.entries[0].id });
+    expect(s.freedBytes).toBe(250);
   });
 });
+
+/** A minimal freed-bytes log input for reducer wiring tests. */
+function freed(kind: 'delete' | 'evict', bytes: number): RecordActionInput {
+  return {
+    kind,
+    label: 'x',
+    freedBytes: bytes,
+    itemCount: 1,
+    recovery: kind === 'delete' ? 'trash' : 'redownload',
+    paths: ['/x'],
+    moves: [],
+    atMs: 0,
+  };
+}

@@ -10,10 +10,18 @@
  *    time via the running-tally ("Space freed") pill — without ending the session.
  *
  * DISK6/7/8 build Triage, AI-reorg, and the undo-log summary on top of this; the shape of
- * the transitions is fixed here.
+ * the transitions is fixed here. DISK8 threads the persisted {@link SessionLog} through the
+ * state so the running tally is *derived* from it — undoing one action lowers `freedBytes`.
  */
 
 import type { DiskScope, TreemapNode } from './model';
+import {
+  emptySessionLog,
+  recordAction,
+  sessionFreedBytes,
+  undoEntry,
+} from './sessionModel';
+import type { RecordActionInput, SessionLog } from './sessionModel';
 
 export type DiskView = 'visualize' | 'triage' | 'reorg' | 'summary';
 
@@ -37,7 +45,12 @@ export interface DiskManagerState {
   triageTarget: TriageTarget | null;
   /** true while a triage session is open (before its summary). */
   sessionActive: boolean;
-  /** running tally of bytes reclaimed this session — drives the pill + summary. */
+  /** the persisted per-action undo log (DISK8) — every keep/delete/evict/move this session. */
+  log: SessionLog;
+  /**
+   * running tally of bytes reclaimed this session — drives the pill + summary. DERIVED from
+   * {@link log}'s active entries, so undoing a single action lowers it in step.
+   */
   freedBytes: number;
 }
 
@@ -46,6 +59,7 @@ export const initialDiskManagerState: DiskManagerState = {
   scope: 'local',
   triageTarget: null,
   sessionActive: false,
+  log: emptySessionLog,
   freedBytes: 0,
 };
 
@@ -56,7 +70,12 @@ export type DiskAction =
   | { type: 'openSummary' }
   | { type: 'endSession' }
   | { type: 'backToVisualize' }
-  | { type: 'recordFreed'; bytes: number };
+  /** append an action to the undo log (from a triage swipe / reorg apply). */
+  | { type: 'logAction'; input: RecordActionInput }
+  /** individually undo one logged action; the derived tally drops it. */
+  | { type: 'undoLogEntry'; id: string }
+  /** replace the log with the value loaded from `storage.*` on mount. */
+  | { type: 'hydrateLog'; log: SessionLog };
 
 /** Turn a clicked treemap node into a scoped triage target. */
 export function triageTargetFromNode(node: TreemapNode, scope: DiskScope): TriageTarget {
@@ -97,8 +116,18 @@ export function reduceDiskManager(
       // Return to the persistent shell, keeping the running tally intact.
       return { ...state, view: 'visualize' };
 
-    case 'recordFreed':
-      return { ...state, freedBytes: state.freedBytes + Math.max(0, action.bytes) };
+    case 'logAction': {
+      const log = recordAction(state.log, action.input);
+      return { ...state, log, freedBytes: sessionFreedBytes(log) };
+    }
+
+    case 'undoLogEntry': {
+      const log = undoEntry(state.log, action.id);
+      return { ...state, log, freedBytes: sessionFreedBytes(log) };
+    }
+
+    case 'hydrateLog':
+      return { ...state, log: action.log, freedBytes: sessionFreedBytes(action.log) };
 
     default:
       return state;

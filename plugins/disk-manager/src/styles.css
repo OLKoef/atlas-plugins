@@ -541,6 +541,134 @@
   align-items: center;
 }
 
+/* Per-action counts — the five-card grid (Kept / Deleted / Evicted / App removed / Reorganized). */
+.atlas-disk-manager .stat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.atlas-disk-manager .stat-card {
+  padding: 14px;
+  text-align: center;
+}
+.atlas-disk-manager .stat-card-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.atlas-disk-manager .stat-card-lbl {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+/* Undo log — one row per keep/delete/evict/move, each individually undoable (DISK8). */
+.atlas-disk-manager .log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.atlas-disk-manager .log-list {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+.atlas-disk-manager .log-empty {
+  padding: 16px 14px;
+  font-size: var(--size-caption);
+  color: var(--text-tertiary);
+}
+.atlas-disk-manager .log-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  font-size: var(--size-caption);
+  border-left: 3px solid transparent;
+}
+.atlas-disk-manager .log-row:not(:last-child) {
+  border-bottom: 1px solid var(--border);
+}
+.atlas-disk-manager .log-row.del {
+  border-left-color: var(--destructive);
+}
+.atlas-disk-manager .log-row.evict {
+  border-left-color: var(--accent);
+}
+.atlas-disk-manager .log-row.reorg {
+  border-left-color: var(--tint-purple);
+}
+.atlas-disk-manager .log-row.undone {
+  opacity: 0.55;
+}
+.atlas-disk-manager .log-row.undone .log-desc {
+  text-decoration: line-through;
+}
+.atlas-disk-manager .log-time {
+  color: var(--text-tertiary);
+  font-family: var(--mono);
+  width: 56px;
+  flex-shrink: 0;
+}
+.atlas-disk-manager .log-desc {
+  flex: 1;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.atlas-disk-manager .log-desc b {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.atlas-disk-manager .log-tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+.atlas-disk-manager .log-tag.del {
+  background: var(--destructive-subtle);
+  color: var(--destructive);
+}
+.atlas-disk-manager .log-tag.evict {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+.atlas-disk-manager .log-tag.reorg {
+  background: rgba(124, 77, 204, 0.14);
+  color: var(--tint-purple);
+}
+.atlas-disk-manager .log-tag.keep {
+  background: var(--success-subtle);
+  color: var(--success);
+}
+.atlas-disk-manager .log-undo {
+  font-size: 11px;
+  color: var(--accent);
+  background: none;
+  border: none;
+  font-family: var(--font);
+  cursor: pointer;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.atlas-disk-manager .log-undo:hover {
+  text-decoration: underline;
+}
+.atlas-disk-manager .log-undone {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
 /* ============================================================
    TRIAGE (swipe UI) — DISK6. Ported from DiskManagerApproved.html.
    ============================================================ */
