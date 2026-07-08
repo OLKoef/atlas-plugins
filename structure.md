@@ -15,7 +15,7 @@ atlas-plugins/
 ├── create-plugin/          # create-atlas-plugin — scaffolder CLI + template
 ├── plugins/                # authored / built plugins (one dir per plugin id)
 │   ├── example-widget/     # reference plugin: the create-plugin template, rendered
-│   └── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage + AI-reorg screens
+│   └── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage + AI-reorg + Session-summary screens
 ├── scripts/                # release/catalog pipeline (build-catalog.mjs + lib/release.mjs)
 ├── .github/workflows/      # release-plugin.yml — CI on a `<id>-v<semver>` tag
 ├── structure.md            # this file
@@ -90,7 +90,7 @@ SDK-authored, Vite-built bundles.
 Full-sidebar plugin that visualizes and reclaims disk space. DISK5 ships the scaffold,
 manifest, and the **Visualize** screen; DISK6 adds the **Triage** swipe UI; DISK7 adds the
 **AI-reorg review** (propose → tree diff → approve → apply); DISK8 adds the
-session-summary/undo-log on top of the navigation model established here.
+**Session summary + per-action undo log** on top of the navigation model established here.
 Logic is split from React so it unit-tests in the shared node/vitest run with no new deps:
 
 - `manifest.json` — `type:"tool"`, `minAtlasApi:1`, permissions
@@ -104,7 +104,21 @@ Logic is split from React so it unit-tests in the shared node/vitest run with no
 - `src/navigation.ts` — the locked navigation model as a pure reducer (`reduceDiskManager`):
   Visualize is the persistent shell, Reorg is a header action, a treemap node click sets a
   **scoped** `TriageTarget`, and the summary auto-appears at session end / via the
-  running-tally pill.
+  running-tally pill. DISK8 threads the persisted `SessionLog` through the state: `logAction`
+  / `undoLogEntry` / `hydrateLog` evolve `log`, and the running-tally `freedBytes` is **derived**
+  from it via `sessionFreedBytes`, so undoing one action lowers the tally in step.
+- `src/sessionModel.ts` — framework-free session-tracking + per-action undo log (DISK8),
+  mirroring Atlas's Claude-Connector activity-log pattern. An immutable `SessionLog` of
+  `UndoLogEntry` rows (`recordAction` appends, `undoEntry` flips one `undone`); the running
+  tally (`sessionFreedBytes`) and per-kind counts (`sessionCounts`) are **derived** from the
+  active (non-undone) entries, so an individual undo drops out of the totals by construction —
+  no counter to keep in sync. `triageActionInput` / `reorgActionInput` build entries from
+  resolved triage swipes / applied reorgs; `planUndo` + `applyUndo` isolate the sole
+  disk-touching undo (a reorg **reverse-move** replayed via `disk.applyReorgPlan` — trash /
+  redownload carry no primitive, so the plan surfaces guidance instead, mirroring the
+  triage/reorg `resolve*`/`apply*` seam). `serializeSessionLog`/`parseSessionLog` +
+  `loadSessionLog`/`saveSessionLog` persist tolerantly through `storage.*` (garbage → a clean
+  empty log; `seq` recovered from entry ids so an id is never re-issued).
 - `src/triageModel.ts` — framework-free Triage model (DISK6): the **locked** `TRIAGE_ACTIONS`
   (Delete-left / Evict-middle / Keep-right) + `ARROW_ICONS` geometry, `canEvict` (downloaded
   iCloud files only) / `evictLabel`, the reclaim-value ordering (`reclaimValue` =
@@ -123,19 +137,31 @@ Logic is split from React so it unit-tests in the shared node/vitest run with no
   disk-touching `applyReorgDecision` (fires `disk.applyReorgPlan` only when `willApply`). Plus
   the offline mocks (`mockReorgFiles`, `mockReorgProposalJson`, `mockAiReorgApi`,
   `mockUnconfiguredAiApi`). Never auto-applies — mirrors triage's `resolve*`/`apply*` seam.
-- `src/Visualize.tsx` / `src/Triage.tsx` / `src/Reorg.tsx` — presentational screens; `src/Panel.tsx`
-  — the shell (`useReducer` + async `disk.scan`) whose `TriageController` drives the
-  reclaim-sorted queue and whose `ReorgController` batches a proposal via `proposeReorg` on
-  mount, owns the tree-diff review state, and applies only the accepted moves through the
-  approval gate (a model rejection surfaces as "can't propose right now," not a crash); Summary
-  remains a placeholder. `src/index.tsx` default-exports the `AtlasPlugin` (`{ manifest, Panel }`)
-  and imports `styles.css` (scoped under `.atlas-disk-manager`).
+- `src/Visualize.tsx` / `src/Triage.tsx` / `src/Reorg.tsx` / `src/Summary.tsx` — presentational
+  screens; `src/Panel.tsx` — the shell (`useReducer` + async `disk.scan`) whose
+  `TriageController` drives the reclaim-sorted queue and logs every resolved swipe, whose
+  `ReorgController` batches a proposal via `proposeReorg` on mount, owns the tree-diff review
+  state, and applies only the accepted moves through the approval gate (a model rejection
+  surfaces as "can't propose right now," not a crash). DISK8: the Panel hydrates the persisted
+  log once on mount (`loadSessionLog`) and re-persists it on every change (`saveSessionLog`);
+  `Summary.tsx` renders the "freed this session" hero, the five-card action grid (Kept /
+  Deleted / Evicted / App removed / Reorganized), and the newest-first undo log (last 20) where
+  each row's **Undo** fires `undoLogEntry` immediately (dropping it from the tally) then
+  `applyUndo` for the disk reverse. Both Visualize and Triage show the `tally-pill`
+  ("Space freed: …", when > 0) that opens the summary anytime without ending the session.
+  `src/index.tsx` default-exports the `AtlasPlugin` (`{ manifest, Panel }`) and imports
+  `styles.css` (scoped under `.atlas-disk-manager`).
 - `src/__tests__/` — manifest validation, treemap/layout/scope model, the reducer wiring, a
   `react-dom/server` render of the scopes + treemap + iCloud aggregates, the Triage logic
   (reclaim ordering, uninstall confirm gate, action→`disk.*` mapping) and its render, plus the
   reorg model (`reorg.test.ts`: parse/guard, `proposeReorg` batching + graceful rejection,
   review reducer, and — the crux — approve-gates-apply / no move fires without approval) and the
   Reorg screen render (`reorg.test.tsx`: tree diff, apply disabled at 0 accepted, loading/error).
+  DISK8 adds the session model (`session.test.ts`: record/undo, triage+reorg → entry mapping,
+  and — the acceptance crux — the running tally sums active entries while undoing one action
+  removes exactly its bytes, per-kind counts drop undone entries, `planUndo`/`applyUndo` fire a
+  disk reverse only for reorg, and tolerant persistence round-trips) and the Summary render
+  (`session.test.tsx`: hero total, stat grid, per-row Undo, undone rows, empty state).
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 

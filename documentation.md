@@ -1,5 +1,29 @@
 # Documentation log
 
+### 2026-07-08 — DISK8: Disk Manager session tracking + per-action undo log
+
+Added the **Session summary + per-action undo log** on top of the DISK5 navigation shell,
+mirroring Atlas's Claude-Connector activity-log pattern. New framework-free `sessionModel.ts`
+holds an immutable `SessionLog`: `recordAction` appends one `UndoLogEntry` per resolved
+keep/delete/evict/uninstall/reorg, and the running "space freed this session" tally
+(`sessionFreedBytes`) plus per-kind counts (`sessionCounts`) are **derived** from the active
+(non-undone) entries — so `undoEntry` flipping a single row drops it out of the totals by
+construction, with no counter to keep in sync. `planUndo`/`applyUndo` isolate the sole
+disk-touching undo (a reorg **reverse-move** replayed via `disk.applyReorgPlan`; trash/redownload
+have no primitive, so the plan carries the guidance the UI surfaces), and the log persists
+tolerantly through `storage.*` (`load`/`saveSessionLog`) so the tally + undo affordance survive a
+reload. The `navigation.ts` reducer threads the log (`logAction`/`undoLogEntry`/`hydrateLog`), the
+`Panel` hydrates-on-mount + persists-on-change, `Summary.tsx` renders the freed hero / five-card
+grid / newest-first undo-log rows with per-row Undo, and a `tally-pill` on Visualize + Triage
+opens the summary anytime. Why: the wireframe's session-summary contract is a reachable running
+tally where *individual* actions can be reversed, not just recovered from Trash. Files:
+plugins/disk-manager/src/sessionModel.ts, plugins/disk-manager/src/Summary.tsx,
+plugins/disk-manager/src/navigation.ts, plugins/disk-manager/src/Panel.tsx,
+plugins/disk-manager/src/Visualize.tsx, plugins/disk-manager/src/Triage.tsx,
+plugins/disk-manager/src/styles.css, plugins/disk-manager/src/__tests__/session.test.ts,
+plugins/disk-manager/src/__tests__/session.test.tsx,
+plugins/disk-manager/src/__tests__/navigation.test.ts, structure.md, documentation.md.
+
 ### 2026-07-08 — DISK7: Disk Manager AI-assisted reorganization
 
 Added the **review-then-approve** AI-reorg flow on top of the DISK5 navigation shell. The
