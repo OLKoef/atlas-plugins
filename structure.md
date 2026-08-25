@@ -49,7 +49,9 @@ implementation.md is this repo's source of truth (it cannot read Dashboard's Typ
   `parseManifest` / `safeParseManifest` validator (id charset, semver, type enum, entry
   traversal guard, `minAtlasApi`), plus `isApiCompatible` / `isKnownPermission`.
 - `src/api.ts` — `AtlasPluginApi` bridge (`tasks`, `subjects`, `events`, `focus`,
-  `storage`, `ui`, `net`, `settings`, `disk`, `ai`) and its read-model types.
+  `storage`, `ui`, `net`, `settings`, `disk`, `ai`, and the **optional** `notes` insert bridge
+  — `NotesApi`, MATH6/MATH7: LaTeX at the active note's cursor + image via the notes pipeline;
+  optional so a plugin can detect a host older than MATH7) and its read-model types.
 - `src/disk.ts` — Disk Manager backend (`disk.*`, DISK1–DISK4) + `ai.chat` (DISK10) types,
   and `PluginPermissionError`.
 - `src/plugin.ts` — the `AtlasPlugin` entry contract, `AtlasPluginRuntime` (the
@@ -172,13 +174,14 @@ Full-sidebar plugin: a Desmos/GeoGebra-inspired suite where **one** plugin hosts
 behind topbar tabs. MATH1 ships the scaffold, manifest, and the **tool-tab shell**; MATH2/3
 complete Graphing (rail + canvas, then sliders / trace / persistence); MATH4 completes
 Scientific (tape + REPL + collapsible keypad); MATH5 completes Matrix (named matrices, grid
-editor, compute line) — so all three of v1's tools have shipped; MATH6 is export/insert (needs
-the Dashboard-side MATH7 `notes:insert` bridge). Same split as Disk Manager — logic outside
-React, so it unit-tests in the shared node/vitest run.
+editor, compute line); MATH6 ships export/insert — copy-as-LaTeX + graph PNG snapshot
+everywhere, with insert-into-note gated at runtime on the Dashboard-side MATH7 `notes:insert`
+bridge — so v1 is code-complete pending MATH8's catalog publish. Same split as Disk Manager —
+logic outside React, so it unit-tests in the shared node/vitest run.
 
-- `manifest.json` — `type:"tool"`, id `math`, `minAtlasApi:1`, permissions `["storage"]`
-  (`notes:insert` is added by MATH6); validated by the SDK's `parseManifest` in
-  `src/__tests__/manifest.test.ts`.
+- `manifest.json` — `type:"tool"`, id `math`, `minAtlasApi:1`, permissions
+  `["storage", "notes:insert"]` (the latter declared by MATH6; the host serves it once MATH7
+  lands); validated by the SDK's `parseManifest` in `src/__tests__/manifest.test.ts`.
 - `src/lib/shellModel.ts` — the tab strip and the shell reducer. `TOOLS` is the locked
   wireframe order: three `live` tools (Graphing / Scientific / Matrix) plus the `soon` slots
   Geometry and 3D, which render disabled and can never become active (`selectTool` on one is
@@ -303,6 +306,22 @@ React, so it unit-tests in the shared node/vitest run.
   by the tape rows (MATH4) and the matrix result cards (MATH5); resolves `false` rather than
   throwing where `navigator.clipboard` is absent, and the ✓ confirmation is local component
   state, so neither tool needs a `ui` API to report a copy.
+- `src/lib/latex.ts` — MATH6, the copy-as-LaTeX serializers shared by all three tools:
+  `numberLatex` / `expressionLatex`, `tapeRowLatex` / `tapeLatex`, the `bmatrix` family
+  (`matrixLatex` / `matrixDefLatex` / `matrixResultLatex` / `computeEntryLatex`) and
+  `graphRowLatex` / `graphRailLatex` — golden-tested so what lands in a note's KaTeX is pinned.
+- `src/lib/exportModel.ts` — MATH6, the topbar's export menu as data: per-tool
+  `ExportSubject`s (what the active tool offers) each paired with its verb (copy vs. insert),
+  so the menu renders and gates uniformly and is unit-testable without React.
+- `src/lib/notes.ts` — MATH6, the insert-into-note seam: `hasNotesBridge` narrows the SDK's
+  **optional** `api.notes` (absent on hosts older than MATH7 — that absence is exactly what
+  keeps every insert action rendered-but-disabled with an explanatory title),
+  `makeInsertBridge` wraps the two bridge calls (LaTeX at the active note's cursor; image via
+  the notes pipeline), and `insertToast` / `insertFailureToast` turn each result into toast copy.
+- `src/lib/snapshot.ts` — MATH6, the graph PNG snapshot: `inlineCssVars` bakes the computed
+  Deep Focus colors into the plot's SVG markup, `standaloneSvgMarkup` + `svgDataUrl` make it
+  self-contained, and `capturePlotPng` rasterizes at `SNAPSHOT_SCALE` (2×) — resolving `null`
+  rather than throwing when there is no plot to capture.
 - `src/ExpressionRail.tsx` / `src/GraphCanvas.tsx` / `src/Graphing.tsx` — the Graphing
   surfaces: the wireframe's fresh rail (hairline rows, index gutter + swatch, actions on
   hover/selection, inline error message) and the canvas — function-plot draws pan/zoom, unit
@@ -400,7 +419,13 @@ React, so it unit-tests in the shared node/vitest run.
   a mismatch carrying the graphing rail's inline error treatment, `→ C` offered on matrix results
   only), and extends `persist.test.ts` with the `matrix` section (unusable entries dropped, a
   declared size kept over disagreeing cells, the history trim, and a state → disk → state
-  round-trip — plus the three tools' saves proven not to drop each other).
+  round-trip — plus the three tools' saves proven not to drop each other). MATH6 adds
+  `latex.test.ts` (golden LaTeX for expressions, tape rows, `bmatrix` matrices and the graph
+  rail), `exportModel.test.ts` (the per-tool export menu and its copy/insert gating),
+  `notes.test.ts` (bridge detection — insert enabled only when the host exposes `api.notes` —
+  and the toast paths), `snapshot.test.ts` (CSS-var inlining and the standalone-SVG shape),
+  and extends the manifest / shell / scientific / matrix suites with the declared
+  `notes:insert` permission and the topbar export menu.
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 

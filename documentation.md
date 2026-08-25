@@ -1,5 +1,37 @@
 # Documentation log
 
+### 2026-08-25 — MATH6: Export + insert-into-note
+
+Copy-as-LaTeX and the notes bridge, everywhere the wireframe shows them. The SDK grew the
+MATH7 contract first: `NotesApi` (insert LaTeX at the active note's cursor; attach an image
+through the notes image pipeline), deliberately **optional** on `AtlasPluginApi` so a host
+older than MATH7 is detectable rather than assumed, plus `notes:insert` in the permission
+vocabulary and the Math manifest. On the plugin side, `lib/latex.ts` serializes every subject
+(expressions, tape rows, the `bmatrix` family for matrix definitions/results/compute entries,
+and the whole graph rail) with golden tests pinning the exact strings a note's KaTeX will
+render; `lib/exportModel.ts` describes the topbar export menu as per-tool data (subject ×
+copy/insert verb) so it renders and gates uniformly; `lib/notes.ts` is the insert seam
+(`hasNotesBridge` narrowing the optional `api.notes`, `makeInsertBridge` wrapping the two
+calls, toast copy for the success/fallback/failure results); and `lib/snapshot.ts` captures
+the plot as a PNG (`inlineCssVars` bakes the computed theme into standalone SVG markup,
+`capturePlotPng` rasterizes at 2×, `null` when there is nothing to capture). Insert actions
+render on the topbar, tape rows and matrix result cards but stay disabled with an explanatory
+title until the host exposes `api.notes` — that is `dashboard.md`'s MATH7; copy actions work
+today. Why: export is what connects the Math tools to the notes vault — LaTeX feeds the
+editor's KaTeX and snapshots ride the IMG1 image pipeline — and gating on the bridge's
+presence lets this ship before the Dashboard side without a version dance. NOTE: the
+implementing session self-committed the feature (dc6ea18) then hit `error_max_turns` before
+its docs commit; gate re-verified (build clean, 634/634 tests) and this follow-up records the
+docs.
+Files: sdk/src/api.ts, sdk/src/manifest.ts, sdk/src/index.ts,
+sdk/src/__tests__/manifest.test.ts, plugins/math/manifest.json, plugins/math/src/lib/latex.ts,
+plugins/math/src/lib/exportModel.ts, plugins/math/src/lib/notes.ts,
+plugins/math/src/lib/snapshot.ts, plugins/math/src/lib/eval.ts, plugins/math/src/lib/matrix.ts,
+plugins/math/src/Topbar.tsx, plugins/math/src/Panel.tsx, plugins/math/src/Scientific.tsx,
+plugins/math/src/Tape.tsx, plugins/math/src/Matrix*.tsx, plugins/math/src/styles.css,
+plugins/math/src/__tests__/{latex,exportModel,notes,snapshot}.test.ts + extended suites,
+structure.md, documentation.md.
+
 ### 2026-08-25 — MATH5: Matrix — named matrices, editor + compute
 
 Filled the third and last v1 pane with the wireframe's Matrix / Matrix · Empty states: a rail of
