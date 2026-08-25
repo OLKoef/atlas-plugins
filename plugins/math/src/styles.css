@@ -503,6 +503,143 @@
   flex-shrink: 0;
 }
 
+/* Parameter slider cell (MATH3) — auto-created beneath the row that names the constant. */
+.atlas-math .g-cell.g-cell-slider:hover {
+  background: transparent;
+}
+
+.atlas-math .g-gutter-slider {
+  color: var(--text-tertiary);
+  display: flex;
+}
+
+.atlas-math .g-gutter-slider svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.atlas-math .g-slider-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.atlas-math .g-slider-val {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.atlas-math .g-slider-range {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.atlas-math .g-play-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all var(--t);
+  flex-shrink: 0;
+}
+
+.atlas-math .g-play-btn:hover,
+.atlas-math .g-play-btn[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.atlas-math .g-play-btn svg {
+  width: 8px;
+  height: 8px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.atlas-math .g-slider-track {
+  margin-top: 9px;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--border);
+  position: relative;
+}
+
+.atlas-math .g-slider-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  opacity: 0.55;
+}
+
+.atlas-math .g-slider-thumb {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2.5px solid var(--bg-elevated);
+  box-shadow: var(--shadow-1);
+  pointer-events: none;
+}
+
+/*
+ * A real range input under the painted track: it owns the drag, the pointer capture and the
+ * arrow-key stepping, while the fill and thumb above it carry the wireframe's look.
+ */
+.atlas-math .g-slider-input {
+  position: absolute;
+  left: -7px;
+  right: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: calc(100% + 14px);
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: grab;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+.atlas-math .g-slider-input:active {
+  cursor: grabbing;
+}
+
+.atlas-math .g-slider-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+}
+
+.atlas-math .g-slider-track:focus-within .g-slider-thumb {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Canvas. */
 .atlas-math .g-canvas {
   flex: 1;
@@ -577,6 +714,40 @@
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/*
+ * Pinned trace point (MATH3). Positioned at the point's own pixel, so the dot centres on it
+ * and the tooltip hangs up and to the right the way the wireframe draws it.
+ */
+.atlas-math .g-trace {
+  position: absolute;
+  pointer-events: none;
+}
+
+.atlas-math .g-trace-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-primary);
+}
+
+.atlas-math .g-trace-tip {
+  position: absolute;
+  left: 12px;
+  bottom: 4px;
+  white-space: nowrap;
+  font: 600 11px var(--font-mono);
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  box-shadow: var(--shadow-1);
 }
 
 .atlas-math .g-window-readout {

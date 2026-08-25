@@ -1,6 +1,6 @@
 /**
- * Math — the Graphing tool's rail + viewport model (MATH2), as a pure reducer so the whole
- * tool is testable without React or a DOM.
+ * Math — the Graphing tool's rail + viewport model (MATH2, extended by MATH3), as a pure
+ * reducer so the whole tool is testable without React or a DOM.
  *
  * Per the approved wireframe's fresh design (hairline rows + index gutter, **not** the
  * retired card-per-row draft):
@@ -11,17 +11,30 @@
  *    creation so deleting a row never recolours the ones above it;
  *  - **errors are isolated by construction**: {@link graphCells} parses each row on its own
  *    and {@link plottedCurves} filters, so a row that fails to parse marks itself and cannot
- *    take a valid neighbour's curve off the canvas.
+ *    take a valid neighbour's curve off the canvas;
+ *  - a **free constant auto-creates a slider cell beneath its row** (MATH3) — sliders are not
+ *    added, they are a function of the rail's free symbols, so every action that can change a
+ *    row's text runs {@link syncSliders} (see `lib/sliders.ts`);
+ *  - a **click on a curve pins a trace point** as `{ rowId, x }` only; the ordinate is
+ *    re-derived per render (see `lib/trace.ts`) so the pin rides slider drags and edits.
  *
- * Sliders for free parameters, the pinned trace point, and persistence of any of this are
- * MATH3 — hence `free` symbols surface as an error row here rather than as a slider.
+ * `hydrated` mirrors the shell's `restored` flag: plugin storage resolves asynchronously, so
+ * a restore that lands *after* the user has started typing must not clobber what they typed.
  */
 
 import { parseExpression } from './expr';
+import { advanceSlider, scanFreeSymbols, scopeFor, snapToStep, syncSliders } from './sliders';
+import type { SliderDirection, SliderState } from './sliders';
+import type { GraphTrace } from './trace';
 
 /** The shared graph palette, in wireframe order; rows cycle through it. */
 export const GRAPH_PALETTE = ['blue', 'orange', 'green', 'red', 'purple', 'teal'] as const;
 export type GraphColorName = (typeof GRAPH_PALETTE)[number];
+
+/** Narrow an untrusted (persisted) colour name onto the palette. */
+export function isGraphColor(value: unknown): value is GraphColorName {
+  return typeof value === 'string' && (GRAPH_PALETTE as readonly string[]).includes(value);
+}
 
 /** Curves are drawn in CSS vars, so a theme switch recolours them with no redraw of ours. */
 export function graphColorVar(color: GraphColorName): string {
@@ -59,14 +72,27 @@ export interface GraphState {
   viewport: GraphViewport;
   /** monotonic row counter; also drives id and palette assignment (no clock, no RNG). */
   seq: number;
+  /** one per free symbol in the rail, reconciled on every text change (MATH3). */
+  sliders: SliderState[];
+  /** symbols the ▷ button is currently sweeping, with the direction each is travelling. */
+  animating: Record<string, SliderDirection>;
+  /** the pinned trace point, or null (MATH3). */
+  trace: GraphTrace | null;
+  /**
+   * True once persisted state has been applied — or once the user touched the rail, which
+   * makes a late restore moot. Guards the mount-time race the shell's `restored` also guards.
+   */
+  hydrated: boolean;
 }
 
-function makeRow(seq: number): GraphRow {
+function makeRow(seq: number, seed?: GraphRowSeed): GraphRow {
+  const color = seed?.color;
+  const visible = seed?.visible;
   return {
     id: `g${seq}`,
-    src: '',
-    color: GRAPH_PALETTE[(seq - 1) % GRAPH_PALETTE.length],
-    visible: true,
+    src: typeof seed?.src === 'string' ? seed.src : '',
+    color: isGraphColor(color) ? color : GRAPH_PALETTE[(seq - 1) % GRAPH_PALETTE.length],
+    visible: typeof visible === 'boolean' ? visible : true,
   };
 }
 
@@ -84,12 +110,39 @@ function ensureBlankTail(rows: GraphRow[], seq: number): { rows: GraphRow[]; seq
   return { rows: [...rows, makeRow(seq)], seq: seq + 1 };
 }
 
+/**
+ * Re-derive the slider list (and prune animations for symbols that just vanished) after any
+ * change to the rail's text. Cheap enough to run per keystroke: a handful of short rows.
+ */
+function withSliders(state: GraphState, rows: GraphRow[]): GraphState {
+  const sliders = syncSliders(state.sliders, scanFreeSymbols(rows.map((row) => row.src)));
+  if (sliders === state.sliders) return { ...state, rows };
+
+  const animating: Record<string, SliderDirection> = {};
+  for (const slider of sliders) {
+    const direction = state.animating[slider.symbol];
+    if (direction) animating[slider.symbol] = direction;
+  }
+  return { ...state, rows, sliders, animating };
+}
+
 export const initialGraphState: GraphState = {
   rows: [makeRow(1)],
   activeId: 'g1',
   viewport: DEFAULT_VIEWPORT,
   seq: 2,
+  sliders: [],
+  animating: {},
+  trace: null,
+  hydrated: false,
 };
+
+/** One persisted expression row, as `lib/persist.ts` stores it (no runtime id). */
+export interface GraphRowSeed {
+  src: string;
+  color?: unknown;
+  visible?: unknown;
+}
 
 export type GraphAction =
   /** edit one row's source; typing into the blank tail appends the next blank. */
@@ -102,7 +155,17 @@ export type GraphAction =
   | { type: 'zoomOut' }
   | { type: 'resetView' }
   /** the canvas reporting back after a pan / wheel-zoom. */
-  | { type: 'setViewport'; viewport: GraphViewport };
+  | { type: 'setViewport'; viewport: GraphViewport }
+  /** drag (or arrow-key) on a slider track. */
+  | { type: 'setSliderValue'; symbol: string; value: number }
+  /** the ▷ button — start or stop sweeping one slider. */
+  | { type: 'toggleAnimate'; symbol: string }
+  /** one animation frame: advance every sweeping slider by a step, bouncing at the bounds. */
+  | { type: 'tickAnimation' }
+  /** a click on a curve, resolved to a row + abscissa by `lib/trace.ts`. */
+  | { type: 'setTrace'; trace: GraphTrace | null }
+  /** apply the state restored from `storage.graphing` on mount. */
+  | { type: 'hydrate'; exprs: readonly GraphRowSeed[]; sliders: readonly SliderState[]; viewport: GraphViewport };
 
 /** Trim float noise so panning does not grow endless decimals in the readout. */
 function tidy(value: number): number {
@@ -130,7 +193,7 @@ export function reduceGraph(state: GraphState, action: GraphAction): GraphState 
         row.id === action.id ? { ...row, src: action.src } : row,
       );
       const tail = ensureBlankTail(edited, state.seq);
-      return { ...state, rows: tail.rows, seq: tail.seq };
+      return { ...withSliders(state, tail.rows), seq: tail.seq, hydrated: true };
     }
 
     case 'deleteRow': {
@@ -138,10 +201,12 @@ export function reduceGraph(state: GraphState, action: GraphAction): GraphState 
       const kept = state.rows.filter((row) => row.id !== action.id);
       const tail = ensureBlankTail(kept, state.seq);
       return {
-        ...state,
-        rows: tail.rows,
+        ...withSliders(state, tail.rows),
         seq: tail.seq,
         activeId: state.activeId === action.id ? null : state.activeId,
+        // The pin belonged to a row that no longer exists — nothing to ride.
+        trace: state.trace?.rowId === action.id ? null : state.trace,
+        hydrated: true,
       };
     }
 
@@ -152,6 +217,7 @@ export function reduceGraph(state: GraphState, action: GraphAction): GraphState 
         rows: state.rows.map((row) =>
           row.id === action.id ? { ...row, visible: !row.visible } : row,
         ),
+        hydrated: true,
       };
     }
 
@@ -160,16 +226,82 @@ export function reduceGraph(state: GraphState, action: GraphAction): GraphState 
       return { ...state, activeId: action.id };
 
     case 'zoomIn':
-      return { ...state, viewport: zoom(state.viewport, 1 / ZOOM_STEP) };
+      return { ...state, viewport: zoom(state.viewport, 1 / ZOOM_STEP), hydrated: true };
 
     case 'zoomOut':
-      return { ...state, viewport: zoom(state.viewport, ZOOM_STEP) };
+      return { ...state, viewport: zoom(state.viewport, ZOOM_STEP), hydrated: true };
 
     case 'resetView':
-      return { ...state, viewport: DEFAULT_VIEWPORT };
+      return { ...state, viewport: DEFAULT_VIEWPORT, hydrated: true };
 
     case 'setViewport':
-      return { ...state, viewport: action.viewport };
+      return { ...state, viewport: action.viewport, hydrated: true };
+
+    case 'setSliderValue': {
+      const target = state.sliders.find((slider) => slider.symbol === action.symbol);
+      if (!target) return state;
+      const value = snapToStep(target, action.value);
+      if (value === target.value) return state;
+      return {
+        ...state,
+        sliders: state.sliders.map((slider) =>
+          slider.symbol === action.symbol ? { ...slider, value } : slider,
+        ),
+        hydrated: true,
+      };
+    }
+
+    case 'toggleAnimate': {
+      if (!state.sliders.some((slider) => slider.symbol === action.symbol)) return state;
+      const animating = { ...state.animating };
+      if (animating[action.symbol]) delete animating[action.symbol];
+      else animating[action.symbol] = 1;
+      return { ...state, animating };
+    }
+
+    case 'tickAnimation': {
+      const symbols = Object.keys(state.animating);
+      if (symbols.length === 0) return state;
+      const animating = { ...state.animating };
+      const sliders = state.sliders.map((slider) => {
+        const direction = animating[slider.symbol];
+        if (!direction) return slider;
+        const next = advanceSlider(slider, direction);
+        animating[slider.symbol] = next.direction;
+        return next.value === slider.value ? slider : { ...slider, value: next.value };
+      });
+      return { ...state, sliders, animating, hydrated: true };
+    }
+
+    case 'setTrace':
+      return { ...state, trace: action.trace };
+
+    case 'hydrate': {
+      // Only the first restore counts; after that the user is driving.
+      if (state.hydrated) return state;
+      let seq = 1;
+      const restored = action.exprs
+        .filter((seed) => typeof seed?.src === 'string' && seed.src.trim() !== '')
+        .map((seed) => {
+          const row = makeRow(seq, seed);
+          seq += 1;
+          return row;
+        });
+      const tail = ensureBlankTail(restored, seq);
+      // Sync against what the restored rows *actually* reference: a saved slider whose symbol
+      // is gone is dropped, and a symbol that never got one still gets its default.
+      const sliders = syncSliders(action.sliders, scanFreeSymbols(tail.rows.map((row) => row.src)));
+      return {
+        ...state,
+        rows: tail.rows,
+        seq: tail.seq,
+        activeId: null,
+        viewport: action.viewport,
+        sliders,
+        animating: {},
+        hydrated: true,
+      };
+    }
 
     default:
       return state;
@@ -182,40 +314,68 @@ export function blankTailId(state: GraphState): string | null {
   return last && isBlankRow(last) ? last.id : null;
 }
 
-/** One rendered rail row: the wireframe's index gutter, swatch/warning, and inline error. */
+/** One parsed expression row: the wireframe's swatch/warning gutter and inline error. */
 export interface GraphCell {
   row: GraphRow;
-  /** 1-based position in the rail — the index gutter, blank tail included. */
-  index: number;
   blank: boolean;
   /** the inline parse error for *this row only*, or null. */
   error: string | null;
   /** the plot-ready expression when this row can be drawn, else null. */
   fn: string | null;
-}
-
-function describeFree(free: string[]): string {
-  const named = free.map((symbol) => `“${symbol}”`).join(', ');
-  return free.length === 1 ? `Unknown variable ${named}` : `Unknown variables ${named}`;
+  /** free symbols this row introduces — each of them owns a slider cell (MATH3). */
+  free: string[];
 }
 
 /**
- * Derive the rail. Every row is parsed independently — that independence *is* the error
- * isolation the wireframe's error state shows.
+ * Derive the parsed rail. Every row is parsed independently — that independence *is* the
+ * error isolation the wireframe's error state shows.
+ *
+ * A row's free symbols are *not* an error since MATH3: every one of them has a slider, so the
+ * row plots at whatever value the slider currently holds.
  */
 export function graphCells(rows: readonly GraphRow[]): GraphCell[] {
-  return rows.map((row, position) => {
-    const index = position + 1;
-    if (isBlankRow(row)) return { row, index, blank: true, error: null, fn: null };
+  return rows.map((row) => {
+    if (isBlankRow(row)) return { row, blank: true, error: null, fn: null, free: [] };
 
     const parsed = parseExpression(row.src);
-    if (!parsed.ok) return { row, index, blank: false, error: parsed.message, fn: null };
-    // Undetermined parameters can't be sampled yet; MATH3 replaces this with a slider cell.
-    if (parsed.free.length > 0) {
-      return { row, index, blank: false, error: describeFree(parsed.free), fn: null };
-    }
-    return { row, index, blank: false, error: null, fn: parsed.normalized };
+    if (!parsed.ok) return { row, blank: false, error: parsed.message, fn: null, free: [] };
+    return { row, blank: false, error: null, fn: parsed.normalized, free: parsed.free };
   });
+}
+
+/**
+ * One rendered rail row. Sliders sit *in* the rail rather than beside it, so the wireframe's
+ * index gutter numbers them too (`1` expression, `2` its slider, `3` the next expression).
+ */
+export type RailCell =
+  | { kind: 'expr'; index: number; cell: GraphCell }
+  | { kind: 'slider'; index: number; slider: SliderState; ownerId: string };
+
+/**
+ * Interleave slider cells into the rail: each free symbol's slider appears directly beneath
+ * the **first** row that introduces it, and the gutter numbers run through both kinds.
+ */
+export function railCells(
+  cells: readonly GraphCell[],
+  sliders: readonly SliderState[],
+): RailCell[] {
+  const bySymbol = new Map(sliders.map((slider) => [slider.symbol, slider]));
+  const placed = new Set<string>();
+  const rail: RailCell[] = [];
+  let index = 1;
+
+  for (const cell of cells) {
+    rail.push({ kind: 'expr', index, cell });
+    index += 1;
+    for (const symbol of cell.free) {
+      const slider = bySymbol.get(symbol);
+      if (!slider || placed.has(symbol)) continue;
+      placed.add(symbol);
+      rail.push({ kind: 'slider', index, slider, ownerId: cell.row.id });
+      index += 1;
+    }
+  }
+  return rail;
 }
 
 export interface GraphCurve {
@@ -223,13 +383,24 @@ export interface GraphCurve {
   /** the plot-ready expression string function-plot samples. */
   fn: string;
   color: GraphColorName;
+  /** slider values this curve's free symbols resolve to, handed to the sampler as `scope`. */
+  scope: Record<string, number>;
 }
 
 /** The curves the canvas draws: parsed, determinate, and not hidden. */
-export function plottedCurves(cells: readonly GraphCell[]): GraphCurve[] {
+export function plottedCurves(
+  cells: readonly GraphCell[],
+  sliders: readonly SliderState[] = [],
+): GraphCurve[] {
   const curves: GraphCurve[] = [];
   for (const cell of cells) {
-    if (cell.fn && cell.row.visible) curves.push({ id: cell.row.id, fn: cell.fn, color: cell.row.color });
+    if (!cell.fn || !cell.row.visible) continue;
+    curves.push({
+      id: cell.row.id,
+      fn: cell.fn,
+      color: cell.row.color,
+      scope: scopeFor(sliders, cell.free),
+    });
   }
   return curves;
 }

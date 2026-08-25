@@ -61,6 +61,7 @@ export function MathPanel({ api }: { api: AtlasPluginApi }) {
       activeTool={state.activeTool}
       drafts={state.drafts}
       previews={previews}
+      storage={api.storage}
       onSelectTool={(tool) => dispatch({ type: 'selectTool', tool })}
       onDraftChange={(tool, src) => dispatch({ type: 'setDraft', tool, src })}
     />

@@ -10,6 +10,7 @@
  * first to rely on, since its rail and viewport live in its own reducer.
  */
 
+import type { StorageApi } from '@atlas/plugin-sdk';
 import { Graphing } from './Graphing';
 import { Topbar } from './Topbar';
 import { ToolPane } from './ToolPane';
@@ -20,6 +21,7 @@ export function MathShell({
   activeTool,
   drafts,
   previews,
+  storage,
   onSelectTool,
   onDraftChange,
 }: {
@@ -27,6 +29,12 @@ export function MathShell({
   drafts: ToolDrafts;
   /** per-tool ghost result; a tool with no preview maps to null. */
   previews: Partial<Record<LiveToolId, string | null>>;
+  /**
+   * The host's storage namespace, handed to the tools that persist their own section
+   * (MATH3: Graphing). Absent when the plugin runs without the `storage` permission — the
+   * tools still work, they just start empty every time.
+   */
+  storage?: Pick<StorageApi, 'get' | 'set'> | null;
   onSelectTool(tool: ToolId): void;
   onDraftChange(tool: LiveToolId, src: string): void;
 }) {
@@ -43,7 +51,7 @@ export function MathShell({
             preview={previews[tool] ?? null}
             onDraftChange={(src) => onDraftChange(tool, src)}
           >
-            {tool === 'graphing' ? <Graphing /> : null}
+            {tool === 'graphing' ? <Graphing storage={storage} /> : null}
           </ToolPane>
         ))}
       </div>

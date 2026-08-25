@@ -1,10 +1,11 @@
 /**
- * Math — the Graphing tool's plot canvas (MATH2).
+ * Math — the Graphing tool's plot canvas (MATH2, trace point added in MATH3).
  *
  * The drawing itself is function-plot's (pan/zoom via d3, unit grid, axis labels, its own
  * sampler); this component is the React seam around it — the wireframe's `.g-canvas` chrome
- * (zoom-in / zoom-out / reset stack, the window readout, the empty-state suggestion chips)
- * plus the lifecycle needed to drive an imperative chart from a reducer.
+ * (zoom-in / zoom-out / reset stack, the window readout, the empty-state suggestion chips,
+ * the pinned trace tooltip) plus the lifecycle needed to drive an imperative chart from a
+ * reducer.
  *
  * Two directions of viewport change have to coexist without fighting:
  *
@@ -15,8 +16,17 @@
  *
  * `appliedViewport` is what tells them apart: the `all:zoom` listener records the window it
  * is about to report before reporting it, so the re-render that follows recognises the value
- * as already applied and rebuilds nothing. Together with `appliedKey` (curves + size), a
- * rebuild happens only when something actually changed.
+ * as already applied and rebuilds nothing. Together with `appliedKey` (curves + slider scope
+ * + size), a rebuild happens only when something actually changed.
+ *
+ * Parameter values reach the sampler as each datum's `scope`, which function-plot merges into
+ * the variables it evaluates `fn` with — so dragging a slider re-samples the same compiled
+ * expression instead of rewriting it.
+ *
+ * The trace is **ours, not function-plot's**: its tip follows the pointer, while the
+ * wireframe pins a point on click. So the dot, its drop line and the tooltip are an absolutely
+ * positioned overlay, placed through the chart's own d3 scales (`meta.xScale`) rather than a
+ * re-derivation of function-plot's margins.
  *
  * function-plot is loaded lazily (`lib/plot.ts`) and only ever touched inside these effects,
  * so nothing here runs — or needs a DOM — in the unit-test run.
@@ -27,6 +37,8 @@ import type { Chart, FunctionPlotDatum, FunctionPlotOptions } from 'function-plo
 import { loadFunctionPlot } from './lib/plot';
 import { SUGGESTION_CHIPS, graphColorVar, windowReadout } from './lib/graphModel';
 import type { GraphAction, GraphCurve, GraphViewport } from './lib/graphModel';
+import { formatTraceLabel, pickTrace } from './lib/trace';
+import type { ResolvedTrace } from './lib/trace';
 
 function ResetIcon() {
   return (
@@ -36,6 +48,9 @@ function ResetIcon() {
     </svg>
   );
 }
+
+/** How near a click has to land, in pixels, to count as hitting a curve. */
+const TRACE_HIT_RADIUS = 14;
 
 function sameViewport(a: GraphViewport, b: GraphViewport | null): boolean {
   if (!b) return false;
@@ -47,19 +62,25 @@ function sameViewport(a: GraphViewport, b: GraphViewport | null): boolean {
   );
 }
 
-/** Everything a rebuild depends on besides the window: which curves, at what size. */
+/** Everything a rebuild depends on besides the window: which curves, at what values, size. */
 function buildKey(curves: readonly GraphCurve[], width: number, height: number): string {
-  return `${width}x${height}|${curves.map((c) => `${c.id}:${c.color}:${c.fn}`).join('|')}`;
+  const data = curves
+    .map((curve) => `${curve.id}:${curve.color}:${curve.fn}:${JSON.stringify(curve.scope)}`)
+    .join('|');
+  return `${width}x${height}|${data}`;
 }
 
 export function GraphCanvas({
   curves,
   viewport,
+  trace,
   onPickSuggestion,
   dispatch,
 }: {
   curves: readonly GraphCurve[];
   viewport: GraphViewport;
+  /** the pinned trace resolved against the curves being drawn now, or null. */
+  trace: ResolvedTrace | null;
   onPickSuggestion(src: string): void;
   dispatch(action: GraphAction): void;
 }) {
@@ -70,6 +91,10 @@ export function GraphCanvas({
   const appliedKey = useRef<string | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [unavailable, setUnavailable] = useState(false);
+  /** Where the trace overlay draws, in host pixels — recomputed whenever the chart redraws. */
+  const [tracePixel, setTracePixel] = useState<{ left: number; top: number } | null>(null);
+  /** Last pointer position in data space, as reported by function-plot's own mousemove. */
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
 
   // The chart needs explicit pixel dimensions, so the host's size is state, not CSS.
   useEffect(() => {
@@ -84,11 +109,21 @@ export function GraphCanvas({
     return () => observer.disconnect();
   }, []);
 
-  // The `all:zoom` listener is attached once per chart, so it reads the current reducer
-  // through a ref rather than closing over a stale dispatch.
+  // Listeners are attached once per chart, so they read the current reducer and the current
+  // curves through refs rather than closing over stale values.
   const reportViewport = useRef<(next: GraphViewport) => void>(() => {});
+  const reportTrace = useRef<(at: { x: number; y: number }) => void>(() => {});
   useEffect(() => {
     reportViewport.current = (next) => dispatch({ type: 'setViewport', viewport: next });
+    reportTrace.current = (at) => {
+      const chart = chartRef.current;
+      const yScale = chart?.meta.yScale;
+      if (!yScale) return;
+      // A pixel radius only becomes a distance in data units once the scale is known — and
+      // it changes with every zoom, which is why it is computed per click.
+      const tolerance = Math.abs(yScale.invert(0) - yScale.invert(TRACE_HIT_RADIUS));
+      dispatch({ type: 'setTrace', trace: pickTrace(curves, at, tolerance) });
+    };
   });
 
   useEffect(() => {
@@ -131,6 +166,9 @@ export function GraphCanvas({
         options.data = curves.map(
           (curve): FunctionPlotDatum => ({
             fn: curve.fn,
+            // Parameter values the sampler merges in when evaluating `fn` — this is what
+            // makes a slider drag re-plot without touching the expression itself.
+            scope: curve.scope,
             // A CSS var, so the host's light/dark switch recolours curves with no redraw.
             color: graphColorVar(curve.color),
             graphType: 'polyline',
@@ -154,6 +192,12 @@ export function GraphCanvas({
             appliedViewport.current = next;
             reportViewport.current(next);
           });
+          // function-plot already converts the pointer into data space against its own
+          // scales (margins included); tracking its last position is cheaper and more
+          // accurate than redoing that conversion for the click.
+          chart.on('mousemove', (at: { x: number; y: number }) => {
+            pointerRef.current = at;
+          });
         }
       })
       .catch(() => {
@@ -164,6 +208,26 @@ export function GraphCanvas({
       cancelled = true;
     };
   }, [curves, viewport, size.width, size.height]);
+
+  const onCanvasClick = useCallback(() => {
+    const at = pointerRef.current;
+    if (at) reportTrace.current(at);
+  }, []);
+
+  // Project the pinned point into host pixels. Runs after the chart effect (and after any
+  // pan/zoom, which changes `viewport`), so the scales it reads are the ones just drawn.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const meta = chart?.meta;
+    if (!trace || !meta?.xScale || !meta.yScale) {
+      setTracePixel(null);
+      return;
+    }
+    setTracePixel({
+      left: (meta.margin?.left ?? 0) + meta.xScale(trace.x),
+      top: (meta.margin?.top ?? 0) + meta.yScale(trace.y),
+    });
+  }, [trace, viewport, size.width, size.height, curves]);
 
   // Drop the chart on unmount so a remount builds a fresh one rather than reviving the
   // cached instance against a detached node.
@@ -184,7 +248,21 @@ export function GraphCanvas({
 
   return (
     <div className="g-canvas">
-      <div className="g-plot-host" ref={hostRef} />
+      {/* The click pins a trace; the pointer position it resolves against is function-plot's
+          own, tracked above. Pinning is additive and undone by clicking empty space. */}
+      <div className="g-plot-host" ref={hostRef} onClick={onCanvasClick} />
+
+      {trace && tracePixel ? (
+        <div
+          className="g-trace"
+          style={{ left: `${tracePixel.left}px`, top: `${tracePixel.top}px` }}
+        >
+          <span className="g-trace-dot" style={{ background: graphColorVar(trace.color) }} />
+          <span className="g-trace-tip" role="status">
+            {formatTraceLabel(trace.x, trace.y)}
+          </span>
+        </div>
+      ) : null}
 
       {curves.length === 0 ? (
         <div className="g-empty-hint">

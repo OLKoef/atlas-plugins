@@ -9,9 +9,11 @@ import {
   graphCells,
   initialGraphState,
   plottedCurves,
+  railCells,
   reduceGraph,
 } from '../lib/graphModel';
 import type { GraphState } from '../lib/graphModel';
+import { resolveTrace } from '../lib/trace';
 
 const noop = () => {};
 
@@ -29,19 +31,22 @@ function errorState(): GraphState {
 function renderRail(state: GraphState) {
   return renderToStaticMarkup(
     <ExpressionRail
-      cells={graphCells(state.rows)}
+      cells={railCells(graphCells(state.rows), state.sliders)}
       activeId={state.activeId}
       tailId={blankTailId(state)}
+      animating={state.animating}
       dispatch={noop}
     />,
   );
 }
 
 function renderCanvas(state: GraphState) {
+  const curves = plottedCurves(graphCells(state.rows), state.sliders);
   return renderToStaticMarkup(
     <GraphCanvas
-      curves={plottedCurves(graphCells(state.rows))}
+      curves={curves}
       viewport={state.viewport}
+      trace={resolveTrace(curves, state.trace)}
       onPickSuggestion={noop}
       dispatch={noop}
     />,
@@ -140,5 +145,77 @@ describe('plot canvas chrome (MATH2)', () => {
     // function-plot is only ever touched inside an effect, which SSR never runs — that is
     // what keeps the DOM-less unit run free of d3.
     expect(renderCanvas(initialGraphState)).toContain('class="g-plot-host"');
+  });
+
+  it('draws no trace overlay until the chart exists to project it', () => {
+    // The pin is placed through function-plot's own scales, so — like the curves themselves —
+    // it only appears once the chart has been built. `trace.test.ts` covers the geometry.
+    const state = typeIntoTail(initialGraphState, 'sin(x)');
+    const pinned = reduceGraph(state, {
+      type: 'setTrace',
+      trace: { rowId: state.rows[0].id, x: 1 },
+    });
+    expect(renderCanvas(pinned)).not.toContain('g-trace');
+  });
+});
+
+describe('parameter slider cell (MATH3)', () => {
+  /** The wireframe's default rail: `a·sin(x)`, its slider, `x²/4 − 2`, the blank tail. */
+  function sliderState(): GraphState {
+    let state = typeIntoTail(initialGraphState, 'a·sin(x)');
+    state = typeIntoTail(state, 'x^2/4 − 2');
+    return reduceGraph(state, { type: 'setSliderValue', symbol: 'a', value: 2 });
+  }
+
+  it('renders the slider cell beneath its row, in the same index gutter', () => {
+    const html = renderRail(sliderState());
+    expect(html.match(/class="g-cell[ "]/g)).toHaveLength(4);
+    expect(html).toContain('class="g-cell g-cell-slider"');
+    for (const index of ['1', '2', '3', '4']) {
+      expect(html).toContain(`<span class="g-idx">${index}</span>`);
+    }
+    // …and the slider glyph rather than a colour swatch in its gutter.
+    expect(html.match(/class="g-gutter-slider"/g)).toHaveLength(1);
+  });
+
+  it('writes the wireframe’s head: ▷, `a = 2`, and the range caption', () => {
+    const html = renderRail(sliderState());
+    expect(html).toContain('<span class="g-slider-val">2</span>');
+    expect(html).toContain('−5 ≤ a ≤ 5 · step 0.1');
+    expect(html).toContain('title="Animate a"');
+  });
+
+  it('paints the track fill and thumb at the value’s position', () => {
+    // a = 2 over −5…5 sits 70% along, exactly where the wireframe draws it.
+    const html = renderRail(sliderState());
+    expect(html).toContain('class="g-slider-fill" style="width:70%"');
+    expect(html).toContain('class="g-slider-thumb" style="left:70%"');
+  });
+
+  it('offers a real range input, so the drag has keyboard and pointer behaviour', () => {
+    const html = renderRail(sliderState());
+    expect(html).toContain('type="range"');
+    expect(html).toContain('aria-label="Slider a"');
+    expect(html).toContain('aria-valuetext="a = 2"');
+  });
+
+  it('flips ▷ to ‖ while the sweep is running', () => {
+    const running = reduceGraph(sliderState(), { type: 'toggleAnimate', symbol: 'a' });
+    const html = renderRail(running);
+    expect(html).toContain('title="Stop animating a"');
+    expect(html).toContain('aria-pressed="true"');
+  });
+
+  it('gives a slider cell no hide or delete action — it is owned by its row', () => {
+    // Removing it means no longer naming the constant, so an action here would lie.
+    const only = renderRail(typeIntoTail(initialGraphState, 'a·x'));
+    expect(only.match(/title="Remove"/g)).toHaveLength(1);
+    expect(only.match(/title="Hide curve"/g)).toHaveLength(1);
+  });
+
+  it('drops the cell as soon as nothing names the constant', () => {
+    const state = typeIntoTail(initialGraphState, 'a·x');
+    const edited = reduceGraph(state, { type: 'editRow', id: state.rows[0].id, src: '2x' });
+    expect(renderRail(edited)).not.toContain('g-cell-slider');
   });
 });
