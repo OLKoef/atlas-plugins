@@ -196,6 +196,24 @@ split as Disk Manager — logic outside React, so it unit-tests in the shared no
   ghost result for an input line: evaluated against a throwaway scope, and silent (`null`)
   for an empty line, a half-typed expression, a free variable, or a blocked call. MATH2 adds
   the spec's `lib/expr.ts` preprocessing + symbol whitelist on top.
+- `src/lib/expr.ts` — MATH2, the expression front door: `preprocessExpression` (implicit
+  multiplication `2x`→`2*x`, `y =` strip via `stripLeadingY`) and `parseExpression` against an
+  explicit whitelist (`ALLOWED_FUNCTIONS`/`ALLOWED_CONSTANTS`, single free variable `x`;
+  `import`/`createUnit`/assignments blocked), returning a typed
+  `ParsedExpression | ExpressionError` so the rail can mark exactly the broken row.
+- `src/lib/graphModel.ts` — MATH2, the rail model outside React: `reduceGraph` keeps an
+  always-present blank tail row (typing in it appends the next), per-row visibility/color from
+  the locked 6-color `GRAPH_PALETTE`, and error isolation — `graphCells` parses per row and
+  `plottedCurves` keeps returning the valid curves while a bad row marks only its own cell.
+  `DEFAULT_VIEWPORT`/`ZOOM_STEP`/`windowReadout` back the zoom stack + window readout;
+  `SUGGESTION_CHIPS` is the empty-state trio.
+- `src/lib/plot.ts` — `loadFunctionPlot`, the lazy dynamic-import seam for function-plot
+  (bundled into the zip but only loaded when the Graphing canvas first renders).
+- `src/ExpressionRail.tsx` / `src/GraphCanvas.tsx` / `src/Graphing.tsx` — MATH2's surfaces:
+  the wireframe's fresh rail (hairline rows, index gutter + swatch, actions on
+  hover/selection, inline error message) and the canvas — function-plot draws pan/zoom, unit
+  grid and axis labels; the zoom-in/out/reset stack overrides the domains function-plot holds,
+  with the window readout + suggestion chips overlaid.
 - `src/Topbar.tsx` / `src/ToolPane.tsx` / `src/MathShell.tsx` — the presentational shell
   ported from `MathPluginApproved.html` (`.plugin-topbar`, `.tool-tabs`, `.soon-tag`): ∑ brand
   mark, ARIA tablist, one pane per live tool. **All three panes render on every pass** — the
@@ -213,7 +231,10 @@ split as Disk Manager — logic outside React, so it unit-tests in the shared no
   sections); the mathjs preview + engine hardening; a `react-dom/server` render of the shell
   (3 live tabs + 2 disabled "Soon" slots, exactly one active, hidden-not-unmounted panes);
   and `bundle.test.ts`, which asserts the built `dist/index.js` externalizes React while
-  bundling mathjs.
+  bundling mathjs. MATH2 adds `expr.test.ts` (preprocessing rewrites + whitelist blocks),
+  `graphModel.test.ts` (blank-tail append-on-type, hide/delete, error isolation,
+  viewport zoom/readout), and `graphing.test.tsx` (rendered rail + canvas shell: the error row
+  marked, valid curves still plotted, empty-state chips).
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 

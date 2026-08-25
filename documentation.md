@@ -1,5 +1,34 @@
 # Documentation log
 
+### 2026-08-25 — MATH2: Graphing — expression rail + plot canvas
+
+Filled the Graphing pane per the approved wireframe's fresh design. `lib/expr.ts` carries the
+superseded graphing-calculator spec's rules forward: `preprocessExpression` (implicit
+multiplication `2x`→`2*x`, `y =` strip) and `parseExpression` against an explicit symbol
+whitelist (`ALLOWED_FUNCTIONS`/`ALLOWED_CONSTANTS`, single free variable `x`; `import` /
+`createUnit` / assignments blocked) returning typed per-row results so the rail can mark exactly
+the broken row. `lib/graphModel.ts` is the rail model outside React — `reduceGraph` keeps an
+always-present blank tail cell (typing in it appends the next), per-row color from the locked
+6-color `GRAPH_PALETTE`, visibility/delete actions, and error isolation (`graphCells` parses per
+row; `plottedCurves` keeps returning the valid ones while a bad row marks only itself), with
+`DEFAULT_VIEWPORT`/`ZOOM_STEP`/`windowReadout` backing the zoom stack + readout and
+`SUGGESTION_CHIPS` the empty state. `lib/plot.ts` is the lazy dynamic-import seam for
+function-plot, which draws the canvas (d3 pan/zoom, unit grid, axis labels); `GraphCanvas.tsx`
+overrides the domains function-plot holds for zoom-in/out/reset, and `ExpressionRail.tsx`
+renders the hairline rows with index gutter + swatch and hover/selection actions. Why: this is
+the plugin's flagship surface, and the contract it settles — model outside React, function-plot
+behind a lazy seam — is what MATH3's sliders/trace/persistence build directly on. NOTE: the
+implementing session hit `error_max_turns`; the loop's salvage step committed the work
+gate-green (2d1c736, verified: build clean, 323/323 tests) and this follow-up commit records
+the docs.
+Files: plugins/math/src/lib/expr.ts, plugins/math/src/lib/graphModel.ts,
+plugins/math/src/lib/plot.ts, plugins/math/src/ExpressionRail.tsx,
+plugins/math/src/GraphCanvas.tsx, plugins/math/src/Graphing.tsx, plugins/math/src/ToolPane.tsx,
+plugins/math/src/MathShell.tsx, plugins/math/src/styles.css,
+plugins/math/src/__tests__/expr.test.ts, plugins/math/src/__tests__/graphModel.test.ts,
+plugins/math/src/__tests__/graphing.test.tsx, plugins/math/vite.config.ts,
+plugins/math/package.json, package-lock.json, structure.md, documentation.md.
+
 ### 2026-08-25 — MATH1: Math plugin scaffold + tool-tab shell
 
 Created `plugins/math` against the PL2 SDK — a `type:"tool"` manifest (id `math`,
