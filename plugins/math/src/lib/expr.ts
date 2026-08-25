@@ -240,6 +240,23 @@ const REFUSED_NODES = new Map<string, string>([
 ]);
 
 /**
+ * The refusal for a mathjs node type, or null when the kind is ordinary arithmetic.
+ *
+ * Exported so the other places that evaluate user text — MATH4's tape, MATH5's matrix compute
+ * line — refuse the *same* node kinds rather than each keeping their own copy of the list; a
+ * kind added here then closes every door at once. The messages are phrased for a graph row,
+ * so a caller elsewhere rewrites the trailing context (see `lib/eval.ts`, `lib/matrix.ts`).
+ */
+export function refusedNodeMessage(type: string): string | null {
+  return REFUSED_NODES.get(type) ?? null;
+}
+
+/** True for a name this plugin never lets user text reach, wherever it is typed. */
+export function isBlockedName(name: string): boolean {
+  return BLOCKED_NAME_SET.has(name);
+}
+
+/**
  * Parse a rail row and check every symbol it names against the whitelist.
  *
  * Returns the plot-ready string plus the row's free parameters on success; on failure, the
@@ -264,7 +281,7 @@ export function parseExpression(src: string): ExpressionResult {
     if (failure) return;
     const node = raw as unknown as WalkNode;
 
-    const refused = REFUSED_NODES.get(node.type);
+    const refused = refusedNodeMessage(node.type);
     if (refused) {
       failure = refused;
       return;
@@ -278,7 +295,7 @@ export function parseExpression(src: string): ExpressionResult {
       const name = callee?.name;
       if (typeof name !== 'string') {
         failure = 'Only named functions can be called here';
-      } else if (BLOCKED_NAME_SET.has(name)) {
+      } else if (isBlockedName(name)) {
         failure = `${quoted(name)} is not allowed in a graph expression`;
       } else if (!ALLOWED_FUNCTION_SET.has(name)) {
         failure = `Unknown function ${quoted(name)}`;
@@ -288,7 +305,7 @@ export function parseExpression(src: string): ExpressionResult {
 
     if (node.type === 'SymbolNode' && !callees.has(node)) {
       const name = node.name ?? '';
-      if (BLOCKED_NAME_SET.has(name)) {
+      if (isBlockedName(name)) {
         failure = `${quoted(name)} is not allowed in a graph expression`;
       } else if (ALLOWED_FUNCTION_SET.has(name)) {
         failure = `${quoted(name)} is a function — call it like ${name}(x)`;

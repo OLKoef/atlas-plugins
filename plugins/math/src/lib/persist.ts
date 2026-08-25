@@ -15,12 +15,11 @@
  *   "matrix": { … } }
  * ```
  *
- * MATH1 owns `shell.lastTool`; MATH3 owns `graphing`; MATH4 owns `scientific`. The remaining
- * tool section belongs to MATH5, so this module round-trips every *other* top-level key
- * verbatim (the spec's "unknown-field tolerance") — and does the same for unknown keys
- * *inside* the sections it does own. Writing one section must never drop another's saved
- * work, and a blob written by a newer plugin build must survive being read and rewritten by
- * an older one.
+ * MATH1 owns `shell.lastTool`; MATH3 owns `graphing`; MATH4 owns `scientific`; MATH5 owns
+ * `matrix`. Every *other* top-level key is round-tripped verbatim (the spec's "unknown-field
+ * tolerance") — and so are unknown keys *inside* the sections this build does own. Writing
+ * one section must never drop another's saved work, and a blob written by a newer plugin
+ * build must survive being read and rewritten by an older one.
  *
  * Nothing here trusts what it reads: the blob is user-editable JSON on disk, so every parse
  * is total (never throws, always lands on a usable value) and every expression it restores
@@ -37,6 +36,10 @@ import type { SliderState } from './sliders';
 import { DEFAULT_ANGLE_MODE, TAPE_LIMIT, isAngleMode } from './eval';
 import type { AngleMode } from './eval';
 import type { SciState } from './sciModel';
+import { normalizeDim, parseCellText } from './matrix';
+import type { MatrixDef } from './matrix';
+import { HISTORY_LIMIT } from './matrixModel';
+import type { ComputeSeed, MatrixSeed, MatrixState } from './matrixModel';
 
 /** Key inside the plugin's own namespace — Atlas prefixes it with the plugin id. */
 export const MATH_STATE_KEY = 'state';
@@ -393,4 +396,210 @@ export async function saveScientific(
   scientific: PersistedScientific,
 ): Promise<void> {
   await saveSection(storage, SCIENTIFIC_SECTION, serializeScientificSection(scientific));
+}
+
+/* ------------------------------------------------------------------ *
+ * The `matrix` section (MATH5)
+ * ------------------------------------------------------------------ */
+
+export const MATRIX_SECTION = 'matrix';
+
+/**
+ * One saved matrix — the spec's `{ name, rows, cols, cells }`, cells as **numbers**. The live
+ * editor keeps cells as text (a cell mid-edit is `''`), so a blank or non-numeric one is
+ * written as `0`: the data model is numeric, and a half-typed cell is not a value to preserve.
+ */
+export interface PersistedMatrix {
+  name: string;
+  rows: number;
+  cols: number;
+  cells: number[][];
+}
+
+/** A saved result: the spec's `{ scalar: 8 }`, or a matrix as its cells. */
+export type PersistedResult = { scalar: number } | { cells: number[][] };
+
+export interface PersistedComputeEntry {
+  src: string;
+  result: PersistedResult;
+}
+
+export interface PersistedMatrixSection {
+  matrices: PersistedMatrix[];
+  history: PersistedComputeEntry[];
+  /** keys inside `matrix` this build does not know — re-emitted untouched. */
+  extra: Record<string, unknown>;
+}
+
+export const emptyMatrixSection: PersistedMatrixSection = {
+  matrices: [],
+  history: [],
+  extra: {},
+};
+
+/** A rectangular block of finite numbers, or null. Ragged input is not a matrix. */
+function parseNumberCells(raw: unknown): number[][] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const cells: number[][] = [];
+  let width = -1;
+  for (const line of raw) {
+    if (!Array.isArray(line) || line.length === 0) return null;
+    if (width === -1) width = line.length;
+    else if (line.length !== width) return null;
+    const row: number[] = [];
+    for (const value of line) {
+      const number = finiteNumber(value);
+      if (number === null) return null;
+      row.push(number);
+    }
+    cells.push(row);
+  }
+  return cells;
+}
+
+/**
+ * Matrices are dropped, never repaired past their own cells: a nameless entry has nothing to
+ * be called and a ragged one is not a grid. A declared size that disagrees with the cells is
+ * kept as declared — the model pads or clips to it on the way in.
+ */
+function parseMatrices(raw: unknown): PersistedMatrix[] {
+  if (!Array.isArray(raw)) return [];
+  const matrices: PersistedMatrix[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (!isPlainObject(entry)) continue;
+    if (typeof entry.name !== 'string' || entry.name.trim() === '') continue;
+    if (seen.has(entry.name)) continue;
+    const cells = parseNumberCells(entry.cells);
+    if (!cells) continue;
+    const rows = normalizeDim(entry.rows, cells.length);
+    const cols = normalizeDim(entry.cols, cells[0].length);
+    seen.add(entry.name);
+    matrices.push({ name: entry.name, rows, cols, cells });
+  }
+  return matrices;
+}
+
+function parseResult(raw: unknown): PersistedResult | null {
+  if (!isPlainObject(raw)) return null;
+  const scalar = finiteNumber(raw.scalar);
+  if (scalar !== null) return { scalar };
+  const cells = parseNumberCells(raw.cells);
+  return cells ? { cells } : null;
+}
+
+function parseHistory(raw: unknown): PersistedComputeEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const history: PersistedComputeEntry[] = [];
+  for (const entry of raw) {
+    if (!isPlainObject(entry) || typeof entry.src !== 'string' || entry.src.trim() === '') continue;
+    const result = parseResult(entry.result);
+    if (!result) continue;
+    history.push({ src: entry.src, result });
+  }
+  return history.slice(0, HISTORY_LIMIT);
+}
+
+/** Parse the `matrix` section out of an untrusted blob. Never throws. */
+export function parseMatrixSection(raw: unknown): PersistedMatrixSection {
+  if (!isPlainObject(raw)) return emptyMatrixSection;
+  const extra: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === 'matrices' || key === 'history') continue;
+    extra[key] = value;
+  }
+  return {
+    matrices: parseMatrices(raw.matrices),
+    history: parseHistory(raw.history),
+    extra,
+  };
+}
+
+/** Flatten back to the on-disk section shape, unknown keys first so ours always win. */
+export function serializeMatrixSection(
+  state: PersistedMatrixSection,
+): Record<string, unknown> {
+  return {
+    ...state.extra,
+    matrices: state.matrices.map((def) => ({
+      name: def.name,
+      rows: def.rows,
+      cols: def.cols,
+      cells: def.cells.map((row) => row.slice()),
+    })),
+    history: state.history.map((entry) => ({ src: entry.src, result: { ...entry.result } })),
+  };
+}
+
+/** The numeric cells of a live (text) matrix; an unreadable cell persists as `0`. */
+function numericCells(def: MatrixDef): number[][] {
+  return Array.from({ length: def.rows }, (_unused, r) =>
+    Array.from({ length: def.cols }, (_unusedToo, c) => parseCellText(def.cells[r]?.[c] ?? '') ?? 0),
+  );
+}
+
+/** The persistable slice of the live Matrix state: the rail and the result history. */
+export function matrixSnapshot(
+  state: Pick<MatrixState, 'matrices' | 'history'>,
+  extra: Record<string, unknown> = {},
+): PersistedMatrixSection {
+  return {
+    matrices: state.matrices.map((def) => ({
+      name: def.name,
+      rows: def.rows,
+      cols: def.cols,
+      cells: numericCells(def),
+    })),
+    history: state.history.slice(0, HISTORY_LIMIT).map((entry) => ({
+      src: entry.src,
+      result:
+        entry.result.kind === 'scalar'
+          ? { scalar: entry.result.value }
+          : { cells: entry.result.cells.map((row) => row.slice()) },
+    })),
+    extra,
+  };
+}
+
+/** The seeds `reduceMatrix`'s `hydrate` takes, rebuilt from a parsed section. */
+export function matrixSeeds(section: PersistedMatrixSection): {
+  matrices: MatrixSeed[];
+  history: ComputeSeed[];
+} {
+  return {
+    matrices: section.matrices.map((def) => ({
+      name: def.name,
+      rows: def.rows,
+      cols: def.cols,
+      cells: def.cells,
+    })),
+    history: section.history.map((entry) => ({
+      src: entry.src,
+      result:
+        'scalar' in entry.result
+          ? { kind: 'scalar' as const, value: entry.result.scalar }
+          : {
+              kind: 'matrix' as const,
+              rows: entry.result.cells.length,
+              cols: entry.result.cells[0].length,
+              cells: entry.result.cells,
+            },
+    })),
+  };
+}
+
+/** Read + parse the `matrix` section (tolerant of an absent / bad value). */
+export async function loadMatrixSection(
+  storage: Pick<StorageApi, 'get'>,
+): Promise<PersistedMatrixSection> {
+  const state = await loadMathState(storage);
+  return parseMatrixSection(state.sections[MATRIX_SECTION]);
+}
+
+/** Persist the `matrix` section without disturbing the shell or the other tools. */
+export async function saveMatrixSection(
+  storage: Pick<StorageApi, 'get' | 'set'>,
+  matrix: PersistedMatrixSection,
+): Promise<void> {
+  await saveSection(storage, MATRIX_SECTION, serializeMatrixSection(matrix));
 }

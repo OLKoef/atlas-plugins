@@ -16,6 +16,7 @@
 
 import { useState } from 'react';
 import type { RefObject } from 'react';
+import { COPIED_MS, writeClipboard } from './lib/clipboard';
 import { tapeRowLatex } from './lib/eval';
 import type { TapeRow } from './lib/eval';
 
@@ -37,22 +38,6 @@ function InsertIcon() {
     </svg>
   );
 }
-
-/**
- * Best-effort clipboard write. The host is an Electron renderer, so `navigator.clipboard` is
- * there — but a plugin has no business throwing because it wasn't.
- */
-function writeClipboard(text: string): Promise<boolean> {
-  const clipboard = typeof navigator === 'undefined' ? null : navigator.clipboard;
-  if (!clipboard?.writeText) return Promise.resolve(false);
-  return clipboard.writeText(text).then(
-    () => true,
-    () => false,
-  );
-}
-
-/** How long a copied action shows its confirmation before returning to its icon. */
-const COPIED_MS = 1200;
 
 export function Tape({
   rows,

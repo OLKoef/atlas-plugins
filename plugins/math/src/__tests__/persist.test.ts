@@ -4,19 +4,26 @@ import {
   MATH_STATE_VERSION,
   emptyGraphing,
   emptyMathState,
+  emptyMatrixSection,
   emptyScientific,
   graphingSnapshot,
   loadGraphing,
   loadMathState,
+  loadMatrixSection,
   loadScientific,
+  matrixSeeds,
+  matrixSnapshot,
   parseGraphingSection,
   parseMathState,
+  parseMatrixSection,
   parseScientificSection,
   saveGraphing,
   saveLastTool,
+  saveMatrixSection,
   saveScientific,
   scientificSnapshot,
   serializeGraphingSection,
+  serializeMatrixSection,
   serializeScientificSection,
   serializeMathState,
 } from '../lib/persist';
@@ -32,6 +39,8 @@ import type { GraphState } from '../lib/graphModel';
 import { initialSciState, reduceSci } from '../lib/sciModel';
 import type { SciAction, SciState } from '../lib/sciModel';
 import { TAPE_LIMIT } from '../lib/eval';
+import { HISTORY_LIMIT, initialMatrixState, reduceMatrix } from '../lib/matrixModel';
+import type { MatrixAction, MatrixState } from '../lib/matrixModel';
 
 /** In-memory stand-in for the host's per-plugin `storage.*` namespace. */
 function fakeStorage(seed?: unknown) {
@@ -463,5 +472,177 @@ describe('saveScientific / loadScientific (MATH4)', () => {
     await saveLastTool(storage, 'scientific');
     expect(await loadGraphing(storage)).toMatchObject({ exprs: SAVED_GRAPHING.exprs });
     expect(await loadScientific(storage)).toMatchObject({ tape: SAVED_SCIENTIFIC.tape });
+  });
+});
+
+/* ================================================================== *
+ * MATH5 — the `matrix` section
+ * ================================================================== */
+
+/** The spec's data-model example for `matrix`, verbatim. */
+const SAVED_MATRIX = {
+  matrices: [{ name: 'A', rows: 3, cols: 3, cells: [[2, 1, 0], [1, 3, -1], [0, -1, 2]] }],
+  history: [{ src: 'det(A)', result: { scalar: 8 } }],
+};
+
+describe('parseMatrixSection (MATH5)', () => {
+  it('reads the spec’s section shape', () => {
+    const parsed = parseMatrixSection(SAVED_MATRIX);
+    expect(parsed.matrices).toEqual(SAVED_MATRIX.matrices);
+    expect(parsed.history).toEqual(SAVED_MATRIX.history);
+  });
+
+  it('degrades to an empty rail for an absent or malformed section', () => {
+    for (const raw of [undefined, null, 'nope', [1, 2, 3]]) {
+      expect(parseMatrixSection(raw)).toEqual(emptyMatrixSection);
+    }
+  });
+
+  it('drops entries that are not a usable matrix', () => {
+    const parsed = parseMatrixSection({
+      matrices: [
+        { name: 'A', rows: 1, cols: 2, cells: [[1, 2]] },
+        { rows: 2, cols: 2, cells: [[1, 2], [3, 4]] }, // nameless
+        { name: 'B', cells: [[1, 2], [3]] }, // ragged
+        { name: 'C', cells: [[1, 'two']] }, // not numbers
+        { name: 'D', cells: [] },
+        { name: 'A', cells: [[9]] }, // a duplicate name — the first one wins
+        'garbage',
+        null,
+      ],
+    });
+    expect(parsed.matrices).toEqual([{ name: 'A', rows: 1, cols: 2, cells: [[1, 2]] }]);
+  });
+
+  it('keeps a declared size that disagrees with the cells, and floors a bad one', () => {
+    const parsed = parseMatrixSection({
+      matrices: [
+        { name: 'A', rows: 4, cols: 4, cells: [[1, 2], [3, 4]] },
+        { name: 'B', rows: 0, cols: 'wide', cells: [[1, 2, 3]] },
+      ],
+    });
+    expect(parsed.matrices[0]).toMatchObject({ rows: 4, cols: 4 });
+    // A missing / nonsense dimension falls back to the cells' own shape.
+    expect(parsed.matrices[1]).toMatchObject({ rows: 1, cols: 3 });
+  });
+
+  it('drops history entries with no source or no readable result', () => {
+    const parsed = parseMatrixSection({
+      history: [
+        { src: 'det(A)', result: { scalar: 8 } },
+        { src: 'A × B', result: { cells: [[1, 2], [3, 4]] } },
+        { src: 'rank(A)' }, // no result
+        { result: { scalar: 1 } }, // no source
+        { src: 'x', result: { scalar: 'eight' } },
+        { src: 'y', result: { cells: [[1], [2, 3]] } }, // ragged
+      ],
+    });
+    expect(parsed.history).toEqual([
+      { src: 'det(A)', result: { scalar: 8 } },
+      { src: 'A × B', result: { cells: [[1, 2], [3, 4]] } },
+    ]);
+  });
+
+  it('trims a hand-grown history to the same bound the live model keeps', () => {
+    const history = Array.from({ length: HISTORY_LIMIT + 10 }, (_unused, index) => ({
+      src: `det(A) + ${index}`,
+      result: { scalar: index },
+    }));
+    expect(parseMatrixSection({ history }).history).toHaveLength(HISTORY_LIMIT);
+  });
+});
+
+describe('serializeMatrixSection (MATH5)', () => {
+  it('round-trips the spec’s section through parse without losing anything', () => {
+    expect(serializeMatrixSection(parseMatrixSection(SAVED_MATRIX))).toEqual(SAVED_MATRIX);
+  });
+
+  it('tolerates unknown keys inside the section, written by a newer build', () => {
+    const future = { ...SAVED_MATRIX, decomposition: 'lu', pinned: ['A'] };
+    expect(serializeMatrixSection(parseMatrixSection(future))).toEqual(future);
+  });
+});
+
+describe('matrixSnapshot (MATH5)', () => {
+  function run(state: MatrixState, ...actions: MatrixAction[]): MatrixState {
+    return actions.reduce(reduceMatrix, state);
+  }
+
+  /** A 2 × 2 `A` holding `[[1, 2], [3, 4]]`, plus one computed result. */
+  function worked(): MatrixState {
+    let state = run(initialMatrixState, { type: 'create', rows: 2, cols: 2 });
+    const id = state.matrices[0].id;
+    [[1, 2], [3, 4]].forEach((row, r) =>
+      row.forEach((value, c) => {
+        state = run(state, { type: 'setCell', id, row: r, col: c, text: String(value) });
+      }),
+    );
+    return run(state, { type: 'setInput', src: 'det(A)' }, { type: 'submit' });
+  }
+
+  it('stores cells as numbers, and an unreadable cell as zero', () => {
+    let state = worked();
+    state = run(state, { type: 'setCell', id: state.matrices[0].id, row: 0, col: 1, text: '' });
+    expect(matrixSnapshot(state).matrices).toEqual([
+      { name: 'A', rows: 2, cols: 2, cells: [[1, 0], [3, 4]] },
+    ]);
+  });
+
+  it('survives a full round-trip: state → disk → state', async () => {
+    let state = worked();
+    state = run(state, { type: 'setInput', src: 'A × A' }, { type: 'submit' });
+    state = run(state, { type: 'saveResult', id: state.history[0].id });
+
+    const storage = fakeStorage();
+    await saveMatrixSection(storage, matrixSnapshot(state));
+    const restored = await loadMatrixSection(storage);
+    const reopened = reduceMatrix(initialMatrixState, {
+      type: 'hydrate',
+      ...matrixSeeds(restored),
+    });
+
+    expect(reopened.matrices.map((def) => def.name)).toEqual(['A', 'B']);
+    expect(reopened.matrices[1].cells).toEqual([
+      ['7', '10'],
+      ['15', '22'],
+    ]);
+    expect(reopened.history.map((entry) => entry.src)).toEqual(['A × A', 'det(A)']);
+    expect(reopened.history[1].result).toEqual({ kind: 'scalar', value: -2 });
+    // …and the reopened tool computes against the restored rail.
+    const again = run(reopened, { type: 'setInput', src: 'det(B)' }, { type: 'submit' });
+    expect(again.error).toBeNull();
+    expect(again.history[0].result).toEqual({ kind: 'scalar', value: 4 });
+  });
+});
+
+describe('saveMatrixSection / loadMatrixSection (MATH5)', () => {
+  it('stamps the version and leaves the shell and other tools alone', async () => {
+    const storage = fakeStorage({
+      version: 1,
+      shell: { lastTool: 'graphing' },
+      scientific: SAVED_SCIENTIFIC,
+    });
+    await saveMatrixSection(storage, parseMatrixSection(SAVED_MATRIX));
+    expect(storage.cell.value).toEqual({
+      version: MATH_STATE_VERSION,
+      shell: { lastTool: 'graphing' },
+      scientific: SAVED_SCIENTIFIC,
+      matrix: SAVED_MATRIX,
+    });
+  });
+
+  it('reads back an empty rail when nothing has been saved yet', async () => {
+    expect(await loadMatrixSection(fakeStorage())).toEqual(emptyMatrixSection);
+  });
+
+  it('does not let the three tools’ saves drop each other', async () => {
+    const storage = fakeStorage();
+    await saveGraphing(storage, parseGraphingSection(SAVED_GRAPHING));
+    await saveScientific(storage, parseScientificSection(SAVED_SCIENTIFIC));
+    await saveMatrixSection(storage, parseMatrixSection(SAVED_MATRIX));
+    await saveLastTool(storage, 'matrix');
+    expect(await loadGraphing(storage)).toMatchObject({ exprs: SAVED_GRAPHING.exprs });
+    expect(await loadScientific(storage)).toMatchObject({ tape: SAVED_SCIENTIFIC.tape });
+    expect(await loadMatrixSection(storage)).toMatchObject({ matrices: SAVED_MATRIX.matrices });
   });
 });

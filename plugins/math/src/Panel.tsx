@@ -49,8 +49,10 @@ export function MathPanel({ api }: { api: AtlasPluginApi }) {
     });
   }, [api, state.restored, state.activeTool]);
 
-  // The wireframe's live ghost result belongs to the Scientific input row; Graphing draws
-  // its drafts on the canvas (MATH2) and Matrix evaluates on ↵ (MATH5).
+  // The wireframe's live ghost result belongs to the Scientific input row, which owns its own
+  // since MATH4 (it knows the angle mode and `ans`); Graphing draws its drafts on the canvas
+  // (MATH2) and Matrix evaluates its compute line on ↵ (MATH5). What is left here is the
+  // shell-level preview a pane still on the placeholder body would show.
   const previews = useMemo(
     () => ({ scientific: previewExpression(state.drafts.scientific) }),
     [state.drafts.scientific],
