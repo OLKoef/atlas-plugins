@@ -15,7 +15,8 @@ atlas-plugins/
 ├── create-plugin/          # create-atlas-plugin — scaffolder CLI + template
 ├── plugins/                # authored / built plugins (one dir per plugin id)
 │   ├── example-widget/     # reference plugin: the create-plugin template, rendered
-│   └── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage + AI-reorg + Session-summary screens
+│   ├── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage + AI-reorg + Session-summary screens
+│   └── math/               # MATH1+ Math (type:"tool") — tool-tab shell over Graphing / Scientific / Matrix
 ├── scripts/                # release/catalog pipeline (build-catalog.mjs + lib/release.mjs)
 ├── .github/workflows/      # release-plugin.yml — CI on a `<id>-v<semver>` tag
 ├── structure.md            # this file
@@ -31,7 +32,8 @@ root `node_modules` and imports the built `@atlas/plugin-sdk`.
 `npm run build && npm test` (defined in the root `package.json`):
 
 - `build` → `tsc` builds `@atlas/plugin-sdk` to `sdk/dist`, then `vite build` builds each
-  plugin (`@atlas/plugin-example-widget`, `@atlas/plugin-disk-manager`) to its `dist/index.js`.
+  plugin (`@atlas/plugin-example-widget`, `@atlas/plugin-disk-manager`, `@atlas/plugin-math`)
+  to its `dist/index.js`.
 - `test` → `vitest run` over `sdk/src/**/*.test.ts`, `create-plugin/**/*.test.mjs`,
   `scripts/**/*.test.mjs`, and `plugins/**/src/**/*.test.{ts,tsx}` (JSX rendered with the
   automatic runtime; node env, no DOM lib).
@@ -82,8 +84,9 @@ Vite into a plugin's graph).
 ## `plugins/`
 
 One directory per plugin id. `example-widget` is the reference render of the template and
-the build-gate proof. Real marketplace plugins (e.g. Disk Manager, DISK5+) land here as
-SDK-authored, Vite-built bundles.
+the build-gate proof. Real marketplace plugins (Disk Manager DISK5+, Math MATH1+) land here
+as SDK-authored, Vite-built bundles. A plugin may bundle its own heavyweight dependencies
+(Math ships mathjs); only React is ever external.
 
 ### `plugins/disk-manager/` — Disk Manager (`type: "tool"`, DISK5+)
 
@@ -162,6 +165,55 @@ Logic is split from React so it unit-tests in the shared node/vitest run with no
   removes exactly its bytes, per-kind counts drop undone entries, `planUndo`/`applyUndo` fire a
   disk reverse only for reorg, and tolerant persistence round-trips) and the Summary render
   (`session.test.tsx`: hero total, stat grid, per-row Undo, undone rows, empty state).
+
+### `plugins/math/` — Math (`type: "tool"`, MATH1+)
+
+Full-sidebar plugin: a Desmos/GeoGebra-inspired suite where **one** plugin hosts three tools
+behind topbar tabs. MATH1 ships the scaffold, manifest, and the **tool-tab shell**; MATH2/3
+fill in Graphing (rail + canvas, sliders/trace), MATH4 Scientific (tape + keypad), MATH5
+Matrix, MATH6 export/insert (needs the Dashboard-side MATH7 `notes:insert` bridge). Same
+split as Disk Manager — logic outside React, so it unit-tests in the shared node/vitest run.
+
+- `manifest.json` — `type:"tool"`, id `math`, `minAtlasApi:1`, permissions `["storage"]`
+  (`notes:insert` is added by MATH6); validated by the SDK's `parseManifest` in
+  `src/__tests__/manifest.test.ts`.
+- `src/lib/shellModel.ts` — the tab strip and the shell reducer. `TOOLS` is the locked
+  wireframe order: three `live` tools (Graphing / Scientific / Matrix) plus the `soon` slots
+  Geometry and 3D, which render disabled and can never become active (`selectTool` on one is
+  a no-op). `reduceMathShell` holds a **per-tool state slice** (`drafts`) so switching tools
+  never touches another tool's state, and gates the last-tool restore behind a `restored`
+  flag — a `restoreTool` that lands *after* the user clicked a tab is ignored, so storage
+  can't yank them back on mount.
+- `src/lib/persist.ts` — versioned `storage` (de)serialization of the spec's single JSON blob
+  (`{ version, shell, graphing, scientific, matrix }`). MATH1 owns `shell.lastTool` only:
+  `parseMathState` collects every *other* top-level key into `sections` and
+  `serializeMathState` re-emits them verbatim, so `saveLastTool`'s read-modify-write can
+  never drop MATH2–MATH5's saved work (and a blob from a newer build survives an older one
+  rewriting it). Garbage / absent values degrade to the default tool rather than throwing.
+- `src/lib/mathEngine.ts` — the shared **mathjs** instance (bundled into the plugin zip; it
+  backs all three tools), hardened at birth with `import` and `createUnit` disabled so a
+  persisted expression can't reconfigure mathjs. `previewExpression` is the wireframe's live
+  ghost result for an input line: evaluated against a throwaway scope, and silent (`null`)
+  for an empty line, a half-typed expression, a free variable, or a blocked call. MATH2 adds
+  the spec's `lib/expr.ts` preprocessing + symbol whitelist on top.
+- `src/Topbar.tsx` / `src/ToolPane.tsx` / `src/MathShell.tsx` — the presentational shell
+  ported from `MathPluginApproved.html` (`.plugin-topbar`, `.tool-tabs`, `.soon-tag`): ∑ brand
+  mark, ARIA tablist, one pane per live tool. **All three panes render on every pass** — the
+  inactive ones carry `hidden` rather than unmounting — which is what makes "each tool keeps
+  its state while hidden" hold for tool-local state once MATH2/4/5 fill the panes in. The
+  topbar's right-hand insert/settings actions are deliberately not rendered yet (MATH6/MATH7).
+- `src/Panel.tsx` — the stateful panel: restores `shell.lastTool` once on mount and writes it
+  back on each switch (never before the restore lands, or the default would clobber storage).
+  `src/index.tsx` default-exports the `AtlasPlugin` (`{ manifest, Panel }`) and imports
+  `styles.css` (scoped under `.atlas-math`, Deep Focus tokens + the 6-color graph palette).
+- `src/__tests__/` — manifest validation; the shell reducer (tab inventory, disabled slots are
+  inert, and the two acceptance cruxes: every tool's draft survives a full switch round-trip,
+  and the last-tool restore applies once but loses to a user pick); tolerant persistence
+  (round-trip, unknown-section forward-compat, `saveLastTool` preserving other tools'
+  sections); the mathjs preview + engine hardening; a `react-dom/server` render of the shell
+  (3 live tabs + 2 disabled "Soon" slots, exactly one active, hidden-not-unmounted panes);
+  and `bundle.test.ts`, which asserts the built `dist/index.js` externalizes React while
+  bundling mathjs.
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 

@@ -1,5 +1,28 @@
 # Documentation log
 
+### 2026-08-25 — MATH1: Math plugin scaffold + tool-tab shell
+
+Created `plugins/math` against the PL2 SDK — a `type:"tool"` manifest (id `math`,
+`minAtlasApi:1`, permissions `["storage"]`; `notes:insert` waits for MATH6/MATH7) and the tool-tab
+shell from `MathPluginApproved.html`: the ∑ brand mark plus segmented tabs for the three live
+tools (Graphing / Scientific / Matrix) and the disabled Geometry / 3D "Soon" slots. Retention is
+structural in two halves — the shell reducer keys state per tool so a switch never touches another
+tool's slice, and every live pane stays **mounted** (hidden, not unmounted) so tool-local state
+survives once MATH2–MATH5 fill the panes in; the active tool round-trips through `storage` as
+`shell.lastTool`, read-modify-written so it can never drop the tool sections later tickets store
+beside it, and a restore that resolves after the user already clicked a tab is ignored. mathjs is
+bundled into the plugin zip as the shared engine (hardened at birth: `import` and `createUnit`
+disabled, drafts evaluated against a throwaway scope) and drives the input line's live ghost
+result; React stays external via `@atlas/plugin-sdk/vite`, asserted on the built bundle. Why: MATH1
+is the frame every later MATH ticket fills in, so the tab model, the storage contract and the
+bundling decision are settled once, here. Files: plugins/math/manifest.json,
+plugins/math/package.json, plugins/math/tsconfig.json, plugins/math/vite.config.ts,
+plugins/math/.gitignore, plugins/math/README.md, plugins/math/src/lib/shellModel.ts,
+plugins/math/src/lib/persist.ts, plugins/math/src/lib/mathEngine.ts, plugins/math/src/Topbar.tsx,
+plugins/math/src/ToolPane.tsx, plugins/math/src/MathShell.tsx, plugins/math/src/Panel.tsx,
+plugins/math/src/index.tsx, plugins/math/src/styles.css, plugins/math/src/__tests__/*.ts(x),
+package.json, package-lock.json, structure.md, documentation.md.
+
 ### 2026-07-08 — DISK9: Publish Disk Manager v1 to the catalog
 
 Bumped Disk Manager to `1.0.0` and published its first `catalog.json` entry, making it the first
