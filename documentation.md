@@ -1,5 +1,34 @@
 # Documentation log
 
+### 2026-08-25 — MATH3: Graphing — parameter sliders + trace + persistence
+
+Finished the Graphing tool. `lib/sliders.ts` turns a free constant into a knob: `scanFreeSymbols`
+walks the rail (MATH2's `parseExpression` already reported `free` for exactly this) and
+`syncSliders` reconciles the list on every text change — existing symbols keep the value and
+range the user gave them, new ones get the wireframe's default (−5…5, step 0.1, ▷ animate),
+orphans are dropped — so a free symbol is no longer a row error and editing a row never resets a
+knob. `railCells` places each slider cell beneath the row that first names its constant, numbered
+in the same index gutter; values reach function-plot as each datum's `scope`, so a drag re-samples
+the same compiled expression rather than rewriting it. `lib/trace.ts` pins a clicked curve as
+`{ rowId, x }` only and re-derives the ordinate per render, which is what makes the point ride
+slider drags and row edits and stop drawing while its row is hidden/deleted/unparseable; the
+overlay is ours because function-plot's own tip follows the pointer where the wireframe pins on
+click. `lib/persist.ts` gains the spec's `graphing` section (`{ exprs, sliders, viewport }`)
+parsed totally — every field falls back individually, and unknown keys round-trip both at the top
+level and inside the section — with restore gated by a `hydrated` flag (a restore landing after
+the first keystroke loses, mirroring the shell's `restored`) and saves debounced so an animating
+slider doesn't write the blob per frame. Why: sliders and a live trace are what make the tool
+feel like Desmos rather than a plotter, and persistence is what makes the work survive closing
+the plugin — the last three items on the Graphing feature list. Gate: build clean, 420/420 tests.
+Files: plugins/math/src/lib/sliders.ts, plugins/math/src/lib/trace.ts,
+plugins/math/src/lib/graphModel.ts, plugins/math/src/lib/persist.ts,
+plugins/math/src/ExpressionRail.tsx, plugins/math/src/GraphCanvas.tsx,
+plugins/math/src/Graphing.tsx, plugins/math/src/MathShell.tsx, plugins/math/src/Panel.tsx,
+plugins/math/src/styles.css, plugins/math/src/__tests__/sliders.test.ts,
+plugins/math/src/__tests__/trace.test.ts, plugins/math/src/__tests__/graphModel.test.ts,
+plugins/math/src/__tests__/persist.test.ts, plugins/math/src/__tests__/graphing.test.tsx,
+structure.md, documentation.md.
+
 ### 2026-08-25 — MATH2: Graphing — expression rail + plot canvas
 
 Filled the Graphing pane per the approved wireframe's fresh design. `lib/expr.ts` carries the

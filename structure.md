@@ -16,7 +16,7 @@ atlas-plugins/
 ├── plugins/                # authored / built plugins (one dir per plugin id)
 │   ├── example-widget/     # reference plugin: the create-plugin template, rendered
 │   ├── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage + AI-reorg + Session-summary screens
-│   └── math/               # MATH1+ Math (type:"tool") — tool-tab shell over Graphing / Scientific / Matrix
+│   └── math/               # MATH1+ Math (type:"tool") — tool-tab shell over Graphing (rail + canvas + sliders/trace) / Scientific / Matrix
 ├── scripts/                # release/catalog pipeline (build-catalog.mjs + lib/release.mjs)
 ├── .github/workflows/      # release-plugin.yml — CI on a `<id>-v<semver>` tag
 ├── structure.md            # this file
@@ -170,9 +170,10 @@ Logic is split from React so it unit-tests in the shared node/vitest run with no
 
 Full-sidebar plugin: a Desmos/GeoGebra-inspired suite where **one** plugin hosts three tools
 behind topbar tabs. MATH1 ships the scaffold, manifest, and the **tool-tab shell**; MATH2/3
-fill in Graphing (rail + canvas, sliders/trace), MATH4 Scientific (tape + keypad), MATH5
-Matrix, MATH6 export/insert (needs the Dashboard-side MATH7 `notes:insert` bridge). Same
-split as Disk Manager — logic outside React, so it unit-tests in the shared node/vitest run.
+complete Graphing (rail + canvas, then sliders / trace / persistence), MATH4 Scientific (tape +
+keypad), MATH5 Matrix, MATH6 export/insert (needs the Dashboard-side MATH7 `notes:insert`
+bridge). Same split as Disk Manager — logic outside React, so it unit-tests in the shared
+node/vitest run.
 
 - `manifest.json` — `type:"tool"`, id `math`, `minAtlasApi:1`, permissions `["storage"]`
   (`notes:insert` is added by MATH6); validated by the SDK's `parseManifest` in
@@ -185,11 +186,18 @@ split as Disk Manager — logic outside React, so it unit-tests in the shared no
   flag — a `restoreTool` that lands *after* the user clicked a tab is ignored, so storage
   can't yank them back on mount.
 - `src/lib/persist.ts` — versioned `storage` (de)serialization of the spec's single JSON blob
-  (`{ version, shell, graphing, scientific, matrix }`). MATH1 owns `shell.lastTool` only:
+  (`{ version, shell, graphing, scientific, matrix }`). MATH1 owns `shell.lastTool`:
   `parseMathState` collects every *other* top-level key into `sections` and
   `serializeMathState` re-emits them verbatim, so `saveLastTool`'s read-modify-write can
   never drop MATH2–MATH5's saved work (and a blob from a newer build survives an older one
   rewriting it). Garbage / absent values degrade to the default tool rather than throwing.
+  MATH3 adds the **`graphing` section** — `parseGraphingSection` / `serializeGraphingSection`
+  for `{ exprs, sliders, viewport }` (the spec's shape: `src`/`color`/`visible` per row, no
+  runtime ids), `graphingSnapshot` for the persistable slice of live state, and
+  `loadGraphing` / `saveGraphing` on top of the generic `saveSection` read-modify-write. Every
+  field falls back individually (an out-of-palette colour, an inverted slider range, a
+  half-written viewport) instead of rejecting the row, and unknown keys *inside* `graphing`
+  round-trip the same way the unknown top-level sections do.
 - `src/lib/mathEngine.ts` — the shared **mathjs** instance (bundled into the plugin zip; it
   backs all three tools), hardened at birth with `import` and `createUnit` disabled so a
   persisted expression can't reconfigure mathjs. `previewExpression` is the wireframe's live
@@ -201,25 +209,56 @@ split as Disk Manager — logic outside React, so it unit-tests in the shared no
   explicit whitelist (`ALLOWED_FUNCTIONS`/`ALLOWED_CONSTANTS`, single free variable `x`;
   `import`/`createUnit`/assignments blocked), returning a typed
   `ParsedExpression | ExpressionError` so the rail can mark exactly the broken row.
-- `src/lib/graphModel.ts` — MATH2, the rail model outside React: `reduceGraph` keeps an
+- `src/lib/graphModel.ts` — MATH2/MATH3, the rail model outside React: `reduceGraph` keeps an
   always-present blank tail row (typing in it appends the next), per-row visibility/color from
   the locked 6-color `GRAPH_PALETTE`, and error isolation — `graphCells` parses per row and
   `plottedCurves` keeps returning the valid curves while a bad row marks only its own cell.
   `DEFAULT_VIEWPORT`/`ZOOM_STEP`/`windowReadout` back the zoom stack + window readout;
-  `SUGGESTION_CHIPS` is the empty-state trio.
+  `SUGGESTION_CHIPS` is the empty-state trio. MATH3 folds in the three state slices the tool
+  was missing: **sliders** (every text change re-runs the free-symbol sync, so a free constant
+  is a plotted parameter rather than a row error), the **`{ rowId, x }` trace pin**, and a
+  `hydrate` action gated by a `hydrated` flag — the same "a late restore loses to the user"
+  rule the shell's `restored` enforces. `railCells` interleaves slider cells beneath the row
+  that first names each constant and numbers both kinds in one gutter sequence;
+  `plottedCurves` attaches each curve's `scope` (only the constants it references).
+- `src/lib/sliders.ts` — MATH3, the parameter-slider model: `scanFreeSymbols` (rail-wide, in
+  first-appearance order; rows that don't parse contribute nothing) plus `syncSliders`, which
+  **keeps the value and range of any symbol still referenced**, creates the wireframe's default
+  for a new one (−5…5, step 0.1, opening at 1) and drops orphans — so editing a row never
+  resets a knob. Also the stepped/clamped `snapToStep` + `valueAtFraction` the track drags
+  through, `sliderScope`/`scopeFor` for the sampler, `formatSliderRange` (`−5 ≤ a ≤ 5 · step
+  0.1`), the clock-free `advanceSlider` ping-pong one ▷ tick at a time, and `sanitizeSlider`
+  for untrusted persisted values.
+- `src/lib/trace.ts` — MATH3, the pinned trace: `evaluateCurve` samples the *same* normalized
+  string function-plot draws (safe because `lib/expr.ts` whitelists the intersection of the two
+  engines' vocabularies), `pickTrace` resolves a click in data space to the nearest curve
+  within a tolerance, and `resolveTrace` re-derives the ordinate per render — which is what
+  makes the pin ride slider drags and row edits, and simply stop drawing while its row is
+  hidden, deleted or unparseable. `formatTraceLabel` is the `(1.571, 2.000)` tooltip.
 - `src/lib/plot.ts` — `loadFunctionPlot`, the lazy dynamic-import seam for function-plot
   (bundled into the zip but only loaded when the Graphing canvas first renders).
-- `src/ExpressionRail.tsx` / `src/GraphCanvas.tsx` / `src/Graphing.tsx` — MATH2's surfaces:
-  the wireframe's fresh rail (hairline rows, index gutter + swatch, actions on
+- `src/ExpressionRail.tsx` / `src/GraphCanvas.tsx` / `src/Graphing.tsx` — the Graphing
+  surfaces: the wireframe's fresh rail (hairline rows, index gutter + swatch, actions on
   hover/selection, inline error message) and the canvas — function-plot draws pan/zoom, unit
   grid and axis labels; the zoom-in/out/reset stack overrides the domains function-plot holds,
-  with the window readout + suggestion chips overlaid.
+  with the window readout + suggestion chips overlaid. MATH3 adds the **slider cell** (▷/‖,
+  `a = 2`, range caption, and a real `<input type="range">` under the painted fill/thumb so the
+  drag gets keyboard stepping and pointer capture for free) and the **trace overlay** — ours,
+  not function-plot's, whose tip follows the pointer where the wireframe pins on click; the
+  click hit-tests against the library's own reported pointer position and d3 scales rather than
+  a re-derivation of its margins. Slider values reach the sampler as each datum's `scope`, so a
+  drag re-samples the same compiled expression instead of rewriting it. `Graphing.tsx` owns the
+  three effects around all of it: restore-once, a debounced save (an animating slider must not
+  write the blob per frame), and the ▷ interval that dispatches `tickAnimation`.
 - `src/Topbar.tsx` / `src/ToolPane.tsx` / `src/MathShell.tsx` — the presentational shell
   ported from `MathPluginApproved.html` (`.plugin-topbar`, `.tool-tabs`, `.soon-tag`): ∑ brand
   mark, ARIA tablist, one pane per live tool. **All three panes render on every pass** — the
   inactive ones carry `hidden` rather than unmounting — which is what makes "each tool keeps
   its state while hidden" hold for tool-local state once MATH2/4/5 fill the panes in. The
   topbar's right-hand insert/settings actions are deliberately not rendered yet (MATH6/MATH7).
+  `MathShell` also passes `storage` through to the tools that persist their own section
+  (MATH3: Graphing), which stays optional — without the permission the tools still work, they
+  just start empty.
 - `src/Panel.tsx` — the stateful panel: restores `shell.lastTool` once on mount and writes it
   back on each switch (never before the restore lands, or the default would clobber storage).
   `src/index.tsx` default-exports the `AtlasPlugin` (`{ manifest, Panel }`) and imports
@@ -234,7 +273,14 @@ split as Disk Manager — logic outside React, so it unit-tests in the shared no
   bundling mathjs. MATH2 adds `expr.test.ts` (preprocessing rewrites + whitelist blocks),
   `graphModel.test.ts` (blank-tail append-on-type, hide/delete, error isolation,
   viewport zoom/readout), and `graphing.test.tsx` (rendered rail + canvas shell: the error row
-  marked, valid curves still plotted, empty-state chips).
+  marked, valid curves still plotted, empty-state chips). MATH3 adds `sliders.test.ts`
+  (free-symbol scan, default creation, sync keeping dragged values and dropping orphans, step
+  snapping, the ▷ ping-pong sweep, and per-field repair of untrusted persisted sliders) and
+  `trace.test.ts` (sampling, nearest-curve pick, the pin following a slider drag), extends
+  `graphModel.test.ts` with the slider→scope→re-plot path, the trace lifecycle and hydration,
+  extends `persist.test.ts` with the `graphing` section (section round-trip, unknown-key
+  forward-compat at both levels, and a full state → disk → state round-trip that re-plots
+  identically), and extends `graphing.test.tsx` with the rendered slider cell.
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 
