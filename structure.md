@@ -16,7 +16,7 @@ atlas-plugins/
 ├── plugins/                # authored / built plugins (one dir per plugin id)
 │   ├── example-widget/     # reference plugin: the create-plugin template, rendered
 │   ├── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage + AI-reorg + Session-summary screens
-│   └── math/               # MATH1+ Math (type:"tool") — tool-tab shell over Graphing (rail + canvas + sliders/trace) / Scientific (tape + REPL + keypad) / Matrix
+│   └── math/               # MATH1+ Math (type:"tool") — tool-tab shell over Graphing (rail + canvas + sliders/trace) / Scientific (tape + REPL + keypad) / Matrix (rail + grid editor + compute line)
 ├── scripts/                # release/catalog pipeline (build-catalog.mjs + lib/release.mjs)
 ├── .github/workflows/      # release-plugin.yml — CI on a `<id>-v<semver>` tag
 ├── structure.md            # this file
@@ -171,9 +171,10 @@ Logic is split from React so it unit-tests in the shared node/vitest run with no
 Full-sidebar plugin: a Desmos/GeoGebra-inspired suite where **one** plugin hosts three tools
 behind topbar tabs. MATH1 ships the scaffold, manifest, and the **tool-tab shell**; MATH2/3
 complete Graphing (rail + canvas, then sliders / trace / persistence); MATH4 completes
-Scientific (tape + REPL + collapsible keypad); MATH5 Matrix, MATH6 export/insert (needs the
-Dashboard-side MATH7 `notes:insert` bridge). Same split as Disk Manager — logic outside React,
-so it unit-tests in the shared node/vitest run.
+Scientific (tape + REPL + collapsible keypad); MATH5 completes Matrix (named matrices, grid
+editor, compute line) — so all three of v1's tools have shipped; MATH6 is export/insert (needs
+the Dashboard-side MATH7 `notes:insert` bridge). Same split as Disk Manager — logic outside
+React, so it unit-tests in the shared node/vitest run.
 
 - `manifest.json` — `type:"tool"`, id `math`, `minAtlasApi:1`, permissions `["storage"]`
   (`notes:insert` is added by MATH6); validated by the SDK's `parseManifest` in
@@ -203,7 +204,13 @@ so it unit-tests in the shared node/vitest run.
   `{ angleMode, keypadCollapsed, tape }`. A tape row is a *record*, so unlike a slider it is
   dropped rather than repaired when half-written, the snapshot omits failed rows (a refusal is
   a response to a line, not history), and both ends trim to `TAPE_LIMIT` so a hand-edited blob
-  cannot grow the tape past the live model's bound.
+  cannot grow the tape past the live model's bound. MATH5 adds the last one, the **`matrix`
+  section** (`parseMatrixSection` / `serializeMatrixSection` / `matrixSnapshot` / `matrixSeeds`
+  / `loadMatrixSection` / `saveMatrixSection`) for `{ matrices, history }`: cells go to disk as
+  **numbers** per the spec's data model, so a live cell that is blank or half-typed persists as
+  `0`; a nameless, ragged or non-numeric matrix is dropped whole, while a declared `rows`/`cols`
+  that disagrees with its own cells is kept and the model pads or clips to it; history is
+  bounded by `HISTORY_LIMIT` at both ends.
 - `src/lib/mathEngine.ts` — the shared **mathjs** instance (bundled into the plugin zip; it
   backs all three tools), hardened at birth with `import` and `createUnit` disabled so a
   persisted expression can't reconfigure mathjs. `previewExpression` is the wireframe's live
@@ -214,7 +221,10 @@ so it unit-tests in the shared node/vitest run.
   multiplication `2x`→`2*x`, `y =` strip via `stripLeadingY`) and `parseExpression` against an
   explicit whitelist (`ALLOWED_FUNCTIONS`/`ALLOWED_CONSTANTS`, single free variable `x`;
   `import`/`createUnit`/assignments blocked), returning a typed
-  `ParsedExpression | ExpressionError` so the rail can mark exactly the broken row.
+  `ParsedExpression | ExpressionError` so the rail can mark exactly the broken row. The refusal
+  list itself is exported (`refusedNodeMessage`, `isBlockedName`), so every place that evaluates
+  user text — the tape (MATH4), the matrix compute line (MATH5) — refuses the same node kinds
+  and names, and adding one closes every door at once.
 - `src/lib/graphModel.ts` — MATH2/MATH3, the rail model outside React: `reduceGraph` keeps an
   always-present blank tail row (typing in it appends the next), per-row visibility/color from
   the locked 6-color `GRAPH_PALETTE`, and error isolation — `graphCells` parses per row and
@@ -265,6 +275,34 @@ so it unit-tests in the shared node/vitest run.
   "Clear history" drops `ans` with the tape, the keypad writes into the same `input`, and
   `hydrate` is gated by `hydrated` — raised by committing / mode-switching / collapsing, but
   **not** by typing, since a draft is not persisted state for a restore to clobber.
+- `src/lib/matrix.ts` — MATH5, the Matrix tool's values, ops and compute line. **Cells are
+  text, values are numbers**: the editor is a grid of inputs, so a cell mid-edit is `''`, and
+  `matrixValueOf` converts on the way into a computation — which is where a blank cell becomes
+  `A has an empty cell at row 2, column 3` rather than a silent zero. `resizeCells` is the
+  steppers' preserve-in-place resize (grow-then-shrink round-trips), `nextMatrixName` walks
+  `A…Z, A2…` and **reuses a freed name**, and there is deliberately **no cap on n** —
+  `MIN_DIM` is 1 because products need row/column vectors, and the grid scrolls upward.
+  `computeMatrix` is the free-form line: MATH2's `preprocessExpression` gives it `2A` → `2*A`
+  and `×`/`−` folding, then it walks the parsed tree with **its own evaluator** — mathjs does
+  the arithmetic, but `math.add` *broadcasts* (a 2 × 3 plus a 1 × 3 comes back a 2 × 3 instead
+  of refusing), so shapes are checked at every node, which is also what lets a mismatch name
+  the dimensions that disagree. Its vocabulary is exactly `MATRIX_FUNCTIONS` (det / inv /
+  transpose / rank) and the `QUICK_OPS` chips are *sources* for that same line, so one history
+  is structural. `matrixRank` is ours — mathjs has no `rank` — Gaussian elimination with
+  partial pivoting and a magnitude-scaled tolerance, so neither a matrix of millionths nor one
+  of millions is misjudged. `resultText` / `resultLatex` (`bmatrix`) / `matrixFromResult` back
+  the result-card actions.
+- `src/lib/matrixModel.ts` — MATH5, the Matrix reducer: the rail, the selected matrix, the
+  compute line with its inline `error`, and the shared `history` (newest first, `HISTORY_LIMIT`
+  bounded). A quick-op chip writes its source into the line and submits it, so chips and typing
+  share one code path; a failed line sets `error` (cleared by the next keystroke, or by editing
+  the matrices it complained about) and never enters the history, since history holds results.
+  `saveResult` (`→ C`) reuses `nextMatrixName`, so the created matrix is the one the button
+  offered. `hydrate` is gated by `hydrated`, the same late-restore rule as the other tools.
+- `src/lib/clipboard.ts` — the copy actions' best-effort `writeClipboard` + `COPIED_MS`, shared
+  by the tape rows (MATH4) and the matrix result cards (MATH5); resolves `false` rather than
+  throwing where `navigator.clipboard` is absent, and the ✓ confirmation is local component
+  state, so neither tool needs a `ui` API to report a copy.
 - `src/ExpressionRail.tsx` / `src/GraphCanvas.tsx` / `src/Graphing.tsx` — the Graphing
   surfaces: the wireframe's fresh rail (hairline rows, index gutter + swatch, actions on
   hover/selection, inline error message) and the canvas — function-plot draws pan/zoom, unit
@@ -290,16 +328,31 @@ so it unit-tests in the shared node/vitest run.
   `Scientific.tsx` owns the reducer plus restore-once, a debounced save, and the scroll-to-newest
   effect, and binds `↵` / `↑` / `↓` / `Esc` **on the input** rather than the document, so the
   plugin never swallows a key the host wanted.
+- `src/Matrix.tsx` / `src/MatrixRail.tsx` / `src/MatrixEditor.tsx` / `src/MatrixResults.tsx` —
+  the Matrix surfaces, ported from the wireframe's Matrix + Matrix · Empty states: the rail
+  (count pill, dot glyph sized to the matrix and capped at 3 × 3 dots, `+ New matrix` opening
+  the size chooser) and the main column (title, the two steppers, the four chips, the bracketed
+  grid, `Compute`, the result cards). Two departures the "any n × n" rule forces: the grid's
+  column count is inline rather than the wireframe's `.mx-grid-3` class, and it sits in a
+  scroller. `NewMatrixSizes` is one component used twice — the rail popover and the empty
+  hero — since the wireframe draws the same presets plus `n × n…` in both. `MatrixCompute`
+  carries the inline error treatment *borrowed from the graphing rail* (destructive row +
+  one-line message), which is what the spec means by dimension-mismatch errors reusing it. Each
+  rail item has a hover-revealed delete (not in the wireframe, but a rail that can only grow
+  strands storage, and deleting is how a name is freed). `Matrix.tsx` owns the reducer plus
+  restore-once and the debounced save, and binds `↵` / `Esc` on the compute input.
 - `src/Topbar.tsx` / `src/ToolPane.tsx` / `src/MathShell.tsx` — the presentational shell
   ported from `MathPluginApproved.html` (`.plugin-topbar`, `.tool-tabs`, `.soon-tag`): ∑ brand
   mark, ARIA tablist, one pane per live tool. **All three panes render on every pass** — the
   inactive ones carry `hidden` rather than unmounting — which is what makes "each tool keeps
-  its state while hidden" hold for tool-local state, now cashed in by Graphing's rail (MATH2)
-  and Scientific's tape (MATH4); only Matrix still renders the MATH1 placeholder body, until
-  MATH5. The topbar's right-hand insert/settings actions are deliberately not rendered yet
-  (MATH6/MATH7). `MathShell` also passes `storage` through to the tools that persist their own
-  section (MATH3: Graphing, MATH4: Scientific), which stays optional — without the permission
-  the tools still work, they just start empty.
+  its state while hidden" hold for tool-local state, now cashed in by all three: Graphing's rail
+  (MATH2), Scientific's tape (MATH4), Matrix's rail and history (MATH5). With MATH5 the last
+  pane left the MATH1 placeholder body, which stays as `ToolPane`'s fallback for a tool that has
+  not been built (Geometry / 3D, were either promoted off the roadmap). The topbar's right-hand
+  insert/settings actions are deliberately not rendered yet (MATH6/MATH7). `MathShell` also
+  passes `storage` through to the tools that persist their own section (MATH3: Graphing, MATH4:
+  Scientific, MATH5: Matrix), which stays optional — without the permission the tools still
+  work, they just start empty.
 - `src/Panel.tsx` — the stateful panel: restores `shell.lastTool` once on mount and writes it
   back on each switch (never before the restore lands, or the default would clobber storage).
   `src/index.tsx` default-exports the `AtlasPlugin` (`{ manifest, Panel }`) and imports
