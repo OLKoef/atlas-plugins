@@ -1,0 +1,253 @@
+/*
+ * Math plugin styles (MATH1). Ported from MathPluginApproved.html but scoped under
+ * `.atlas-math` (tokens + component classes) so the plugin can never clobber the host's
+ * global CSS. Covers the plugin topbar + tool tabs and the tool-pane frame; MATH2/MATH4/
+ * MATH5 add the graphing rail + canvas, the scientific tape + keypad, and the matrix rail
+ * + editor styling on top of the same tokens.
+ */
+
+.atlas-math {
+  --bg-primary: #f7f8fa;
+  --bg-secondary: #edeef2;
+  --bg-elevated: #ffffff;
+  --text-primary: #16181e;
+  --text-secondary: #565b6b;
+  --text-tertiary: #9da3b4;
+  --accent: #4c5de6;
+  --accent-subtle: rgba(76, 93, 230, 0.1);
+  --destructive: #d93f3f;
+  --success: #2a9060;
+  --warning: #b86a00;
+  --border: #dadce6;
+  --border-strong: #b8bbcc;
+  --border-focus: #4c5de6;
+  --shadow-1: 0 1px 3px rgba(22, 24, 30, 0.08), 0 1px 2px rgba(22, 24, 30, 0.04);
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', sans-serif;
+  --font-mono: 'SF Mono', ui-monospace, Menlo, monospace;
+  --size-headline: 17px;
+  --size-body: 15px;
+  --size-callout: 13px;
+  --size-caption: 12px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 9999px;
+  --t: 140ms ease;
+
+  /* Graph accent palette — light mode (MATH2 draws curves from these). */
+  --graph-blue: #4c5de6;
+  --graph-orange: #b86a00;
+  --graph-green: #2a9060;
+  --graph-red: #d93f3f;
+  --graph-purple: #8b35b8;
+  --graph-teal: #0095aa;
+
+  font-family: var(--font);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-theme='dark'] .atlas-math {
+  --bg-primary: #161820;
+  --bg-secondary: #1e2030;
+  --bg-elevated: #252840;
+  --text-primary: #e8eaf2;
+  --text-secondary: #8b90a8;
+  --text-tertiary: #565b6b;
+  --accent: #7b8ef8;
+  --accent-subtle: rgba(123, 142, 248, 0.12);
+  --destructive: #f0554a;
+  --success: #4ac48a;
+  --warning: #f0a83a;
+  --border: #282b3e;
+  --border-strong: #3a3e55;
+  --border-focus: #7b8ef8;
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+
+  --graph-blue: #7b8ef8;
+  --graph-orange: #f0a83a;
+  --graph-green: #4ac48a;
+  --graph-red: #f0554a;
+  --graph-purple: #c077f0;
+  --graph-teal: #00c8dc;
+}
+
+/* ------------------------------------------------------------------
+   Plugin topbar — ∑ brand + segmented tool tabs
+   ------------------------------------------------------------------ */
+.atlas-math .plugin-topbar {
+  height: 44px;
+  flex-shrink: 0;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+}
+
+.atlas-math .plugin-brand {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-md);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.atlas-math .tool-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-secondary);
+  padding: 3px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.atlas-math .tool-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 13px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font);
+  font-size: var(--size-caption);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all var(--t);
+  white-space: nowrap;
+}
+
+.atlas-math .tool-tab:hover {
+  color: var(--text-primary);
+}
+
+.atlas-math .tool-tab.tt-active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-1);
+}
+
+.atlas-math .tool-tab.tt-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.atlas-math .tool-tab.tt-disabled:hover {
+  color: var(--text-secondary);
+}
+
+.atlas-math .soon-tag {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--warning);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.atlas-math .topbar-spacer {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------------
+   Tool area — one pane per live tool; inactive panes stay mounted
+   ------------------------------------------------------------------ */
+.atlas-math .tool-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.atlas-math .math-pane {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* Hidden tools are display:none, never unmounted — their state survives the switch. */
+.atlas-math .math-pane[hidden] {
+  display: none;
+}
+
+.atlas-math .pane-card {
+  width: 640px;
+  margin: 20px 0;
+  align-self: flex-start;
+  padding: 20px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+
+.atlas-math .pane-title {
+  font-size: var(--size-headline);
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.atlas-math .pane-blurb {
+  font-size: var(--size-callout);
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+}
+
+.atlas-math .pane-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.atlas-math .pane-input-row:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+.atlas-math .pane-prompt {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.atlas-math .pane-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: var(--size-body);
+  color: var(--text-primary);
+}
+
+.atlas-math .pane-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.atlas-math .pane-preview {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--size-callout);
+  color: var(--text-tertiary);
+}
