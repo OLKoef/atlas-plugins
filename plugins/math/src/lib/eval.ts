@@ -332,32 +332,5 @@ export function stepRecall(
   return { input: sources[sources.length - next], recall: { index: next, stash } };
 }
 
-/* ------------------------------------------------------------------ *
- * LaTeX (the tape row's TeX action)
- * ------------------------------------------------------------------ */
-
-/**
- * The typed expression as LaTeX. Built from the *preprocessed* source — so `2x` and `×`
- * serialize as real products — but without the calculator rename, so a copied `ln(e^2)`
- * stays `\ln`-shaped rather than turning into mathjs's `log`. An unparseable line falls back
- * to its own text; copy-as-LaTeX is a convenience, never a failure the user must resolve.
- */
-export function expressionLatex(src: string): string {
-  try {
-    return mathEngine.parse(preprocessExpression(src)).toTex();
-  } catch {
-    return src;
-  }
-}
-
-/** The formatted result as LaTeX (the infinities are the only non-numeric cases). */
-function resultLatex(result: string): string {
-  if (result === '∞') return '\\infty';
-  if (result === '−∞') return '-\\infty';
-  return result;
-}
-
-/** A tape row as LaTeX: `\sqrt{2} = 1.4142136`. */
-export function tapeRowLatex(row: TapeRow): string {
-  return `${expressionLatex(row.src)} = ${resultLatex(row.result)}`;
-}
+/* The tape row's TeX action serializes through `lib/latex.ts` (MATH6), which is where every
+ * copy-as-LaTeX action in the plugin now lives. */

@@ -16,6 +16,8 @@ import type { StorageApi } from '@atlas/plugin-sdk';
 import { MatrixEditor } from './MatrixEditor';
 import { MatrixRail, NewMatrixSizes } from './MatrixRail';
 import { MatrixResults } from './MatrixResults';
+import { matrixExportSubjects } from './lib/exportModel';
+import type { ExportProvider, RegisterExports } from './lib/exportModel';
 import { activeMatrix, initialMatrixState, nextName, reduceMatrix } from './lib/matrixModel';
 import type { MatrixAction, MatrixState } from './lib/matrixModel';
 import { loadMatrixSection, matrixSeeds, matrixSnapshot, saveMatrixSection } from './lib/persist';
@@ -125,7 +127,14 @@ export function MatrixCompute({
   );
 }
 
-export function Matrix({ storage }: { storage?: Pick<StorageApi, 'get' | 'set'> | null }) {
+export function Matrix({
+  storage,
+  registerExports,
+}: {
+  storage?: Pick<StorageApi, 'get' | 'set'> | null;
+  /** MATH6: what the topbar's export action offers while this tool is the active one. */
+  registerExports?: RegisterExports | null;
+}) {
   const [state, dispatch] = useReducer(reduceMatrix, initialMatrixState);
 
   const active = useMemo(() => activeMatrix(state), [state]);
@@ -166,6 +175,18 @@ export function Matrix({ storage }: { storage?: Pick<StorageApi, 'get' | 'set'> 
     // Only the persisted slice should restart the debounce — selecting a matrix must not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storage, state.hydrated, state.matrices, state.history]);
+
+  // 3 · Offer this tool's exports to the topbar (MATH6): the matrix being edited and the
+  // newest result card, read through a stable provider when the menu opens.
+  const latest = useRef<ExportProvider>(() => []);
+  useEffect(() => {
+    latest.current = () => matrixExportSubjects(active, state.history);
+  });
+  useEffect(() => {
+    if (!registerExports) return;
+    registerExports('matrix', () => latest.current());
+    return () => registerExports('matrix', null);
+  }, [registerExports]);
 
   return (
     <div className="mx-tool">

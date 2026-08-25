@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MathShell } from '../MathShell';
+import { ExportMenu } from '../Topbar';
 import { ToolPane } from '../ToolPane';
+import { NOTHING_TO_EXPORT, buildExportItems } from '../lib/exportModel';
+import type { ExportSubject } from '../lib/exportModel';
+import { INSERT_UNAVAILABLE_TITLE } from '../lib/notes';
 import type { LiveToolId, ToolDrafts } from '../lib/shellModel';
 
 const noop = () => {};
@@ -63,6 +67,46 @@ describe('MathShell topbar (MATH1)', () => {
     expect(html.match(/tool-tab tt-active/g)).toHaveLength(1);
     const at = html.indexOf('id="math-tab-matrix"');
     expect(html.slice(at, html.indexOf('>', at))).toContain('tt-active');
+  });
+
+  it('renders the wireframe’s export action, closed, as a menu button (MATH6)', () => {
+    const html = render('graphing');
+    const at = html.indexOf('title="Insert into note · Copy as LaTeX"');
+    expect(at).toBeGreaterThan(-1);
+    const tag = html.slice(html.lastIndexOf('<button', at), html.indexOf('>', at));
+    expect(tag).toContain('topbar-btn');
+    expect(tag).toContain('aria-haspopup="menu"');
+    expect(tag).toContain('aria-expanded="false"');
+    // Nothing is open until it is pressed, so no menu is in the markup.
+    expect(html).not.toContain('class="export-menu"');
+  });
+
+  it('renders the open menu’s rows, with insert disabled on a host without the bridge', () => {
+    const subjects: ExportSubject[] = [
+      { id: 'g', kind: 'latex', label: 'Expressions', latex: 'y = x' },
+      { id: 'p', kind: 'image', label: 'Graph snapshot', capture: () => Promise.resolve(null) },
+    ];
+    const html = renderToStaticMarkup(
+      <ExportMenu
+        items={buildExportItems(subjects, {
+          canInsert: false,
+          insertReason: INSERT_UNAVAILABLE_TITLE,
+        })}
+        onRun={noop}
+      />,
+    );
+    expect(html).toContain('Copy expressions as LaTeX');
+    expect(html).toContain('Insert expressions into note');
+    expect(html).toContain('Insert graph snapshot into note');
+    // Both insert rows disabled and saying why; the copy row untouched.
+    expect(html.match(/disabled=""/g)).toHaveLength(2);
+    expect(html.match(new RegExp(`title="${INSERT_UNAVAILABLE_TITLE}"`, 'g'))).toHaveLength(2);
+  });
+
+  it('says so plainly when the active tool has nothing to export', () => {
+    const html = renderToStaticMarkup(<ExportMenu items={[]} onRun={noop} />);
+    expect(html).toContain('export-menu-empty');
+    expect(html).toContain(NOTHING_TO_EXPORT);
   });
 });
 

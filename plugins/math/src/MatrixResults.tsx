@@ -14,9 +14,9 @@
 import { useState } from 'react';
 import { Bracketed, gridColumns } from './MatrixEditor';
 import { COPIED_MS, writeClipboard } from './lib/clipboard';
-import { formatNumber, isSavableResult, resultLatex, resultText } from './lib/matrix';
+import { formatNumber, isSavableResult, resultText } from './lib/matrix';
 import type { ComputeEntry, MatrixAction } from './lib/matrixModel';
-import { expressionLatex } from './lib/eval';
+import { computeEntryLatex } from './lib/latex';
 
 function CopyIcon() {
   return (
@@ -62,12 +62,7 @@ export function MatrixResults({
                 className="tape-act-btn"
                 type="button"
                 title="Copy as LaTeX"
-                onClick={() =>
-                  copy(
-                    `${entry.id}:latex`,
-                    `${expressionLatex(entry.src)} = ${resultLatex(entry.result)}`,
-                  )
-                }
+                onClick={() => copy(`${entry.id}:latex`, computeEntryLatex(entry))}
               >
                 {copied === `${entry.id}:latex` ? '✓' : 'TeX'}
               </button>

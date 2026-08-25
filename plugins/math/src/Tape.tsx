@@ -6,10 +6,10 @@
  * between them **only when the mode decided the answer** — `sin(45)` is tagged, `√(2)` is
  * not, exactly as the wireframe draws it.
  *
- * Hovering a row reveals copy / copy-as-LaTeX / insert-into-note. Insert renders **disabled**
- * rather than hidden: the wireframe's third action is real, its bridge is not (MATH6 + the
- * Dashboard-side MATH7 `notes:insert` API), and a disabled control with a reason says that
- * where a missing one would just look like a gap.
+ * Hovering a row reveals copy / copy-as-LaTeX / insert-into-note. MATH6 wired the third one
+ * to the notes bridge; where that bridge is missing (a host older than the Dashboard-side
+ * MATH7 `notes:insert` API) it still renders **disabled carrying its reason**, because a
+ * disabled control with a reason says that where a missing one would just look like a gap.
  *
  * A failed row carries no actions — there is no result to copy, only the reason there isn't.
  */
@@ -17,7 +17,9 @@
 import { useState } from 'react';
 import type { RefObject } from 'react';
 import { COPIED_MS, writeClipboard } from './lib/clipboard';
-import { tapeRowLatex } from './lib/eval';
+import { tapeRowLatex } from './lib/latex';
+import { INSERT_UNAVAILABLE_TITLE } from './lib/notes';
+import type { InsertBridge } from './lib/notes';
 import type { TapeRow } from './lib/eval';
 
 function CopyIcon() {
@@ -42,10 +44,13 @@ function InsertIcon() {
 export function Tape({
   rows,
   containerRef,
+  insert,
 }: {
   rows: readonly TapeRow[];
   /** the scrolling element, so the tool can keep the newest row in view. */
   containerRef?: RefObject<HTMLDivElement>;
+  /** the notes bridge (MATH6); absent or unavailable disables the insert action. */
+  insert?: InsertBridge | null;
 }) {
   // Which action last confirmed a copy, as `${rowId}:${kind}` — feedback with no toast, so
   // the tool needs no `ui` API to tell the user the copy landed.
@@ -90,8 +95,11 @@ export function Tape({
               <button
                 className="tape-act-btn"
                 type="button"
-                disabled
-                title="Insert into note — coming soon"
+                disabled={!insert?.available}
+                title={insert?.title ?? INSERT_UNAVAILABLE_TITLE}
+                onClick={() =>
+                  void insert?.insertLatex(tapeRowLatex(row), `${row.src} = ${row.result}`)
+                }
               >
                 <InsertIcon />
               </button>

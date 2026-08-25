@@ -6,16 +6,19 @@
  * {@link MathShell}; everything evaluable goes through the shared mathjs engine.
  */
 
-import { useEffect, useMemo, useReducer } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import type { AtlasPluginApi } from '@atlas/plugin-sdk';
 import { MathShell } from './MathShell';
+import type { ExportProvider } from './lib/exportModel';
 import { previewExpression } from './lib/mathEngine';
+import { makeInsertBridge } from './lib/notes';
 import { loadMathState, saveLastTool } from './lib/persist';
 import {
   DEFAULT_TOOL,
   initialMathShellState,
   reduceMathShell,
 } from './lib/shellModel';
+import type { LiveToolId } from './lib/shellModel';
 
 export function MathPanel({ api }: { api: AtlasPluginApi }) {
   const [state, dispatch] = useReducer(reduceMathShell, initialMathShellState);
@@ -58,12 +61,31 @@ export function MathPanel({ api }: { api: AtlasPluginApi }) {
     [state.drafts.scientific],
   );
 
+  /**
+   * MATH6's export registry. A ref, not state: registering is a tool telling the topbar where
+   * to ask, and re-rendering the whole shell every time a tape row lands would be a heavy way
+   * to keep a menu that is usually closed up to date. The topbar reads it when it opens.
+   */
+  const providers = useRef(new Map<LiveToolId, ExportProvider>());
+  const registerExports = useCallback((tool: LiveToolId, provider: ExportProvider | null) => {
+    if (provider) providers.current.set(tool, provider);
+    else providers.current.delete(tool);
+  }, []);
+  const subjectsFor = useCallback((tool: LiveToolId) => providers.current.get(tool)?.() ?? [], []);
+
+  // The notes bridge, or a bridge that reports itself unavailable — which is what a host
+  // older than MATH7 gets, and what every insert control in the plugin disables on.
+  const insert = useMemo(() => makeInsertBridge(api.notes, api.ui), [api]);
+
   return (
     <MathShell
       activeTool={state.activeTool}
       drafts={state.drafts}
       previews={previews}
       storage={api.storage}
+      registerExports={registerExports}
+      subjectsFor={subjectsFor}
+      insert={insert}
       onSelectTool={(tool) => dispatch({ type: 'selectTool', tool })}
       onDraftChange={(tool, src) => dispatch({ type: 'setDraft', tool, src })}
     />

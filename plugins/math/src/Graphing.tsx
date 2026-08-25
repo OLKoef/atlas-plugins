@@ -18,10 +18,13 @@
  *     itself is the reducer's (`advanceSlider`), so what lives here is only the timer.
  */
 
-import { useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import type { StorageApi } from '@atlas/plugin-sdk';
 import { ExpressionRail } from './ExpressionRail';
 import { GraphCanvas } from './GraphCanvas';
+import { graphExportSubjects } from './lib/exportModel';
+import type { ExportProvider, RegisterExports } from './lib/exportModel';
+import { capturePlotPng } from './lib/snapshot';
 import {
   blankTailId,
   graphCells,
@@ -37,7 +40,14 @@ import { graphingSnapshot, loadGraphing, saveGraphing } from './lib/persist';
 /** Quiet period after the last change before the graph is written back to storage. */
 const SAVE_DEBOUNCE_MS = 400;
 
-export function Graphing({ storage }: { storage?: Pick<StorageApi, 'get' | 'set'> | null }) {
+export function Graphing({
+  storage,
+  registerExports,
+}: {
+  storage?: Pick<StorageApi, 'get' | 'set'> | null;
+  /** MATH6: what the topbar's export action offers while this tool is the active one. */
+  registerExports?: RegisterExports | null;
+}) {
   const [state, dispatch] = useReducer(reduceGraph, initialGraphState);
 
   const cells = useMemo(() => graphCells(state.rows), [state.rows]);
@@ -99,6 +109,21 @@ export function Graphing({ storage }: { storage?: Pick<StorageApi, 'get' | 'set'
     return () => clearInterval(timer);
   }, [animatingCount]);
 
+  // 4 · Offer this tool's exports to the topbar (MATH6). The registered provider is stable
+  // and reads `latest` when the menu opens, so switching tabs or typing a row never
+  // re-registers — and the menu never describes a rail two keystrokes out of date.
+  const plotHostRef = useRef<HTMLDivElement | null>(null);
+  const capture = useCallback(() => capturePlotPng(plotHostRef.current), []);
+  const latest = useRef<ExportProvider>(() => []);
+  useEffect(() => {
+    latest.current = () => graphExportSubjects(state.rows.map((row) => row.src), capture);
+  });
+  useEffect(() => {
+    if (!registerExports) return;
+    registerExports('graphing', () => latest.current());
+    return () => registerExports('graphing', null);
+  }, [registerExports]);
+
   return (
     <div className="g-tool">
       <ExpressionRail
@@ -113,6 +138,7 @@ export function Graphing({ storage }: { storage?: Pick<StorageApi, 'get' | 'set'
         viewport={state.viewport}
         trace={trace}
         dispatch={dispatch}
+        plotHostRef={plotHostRef}
         onPickSuggestion={(src) => {
           if (tailId) dispatch({ type: 'editRow', id: tailId, src });
         }}

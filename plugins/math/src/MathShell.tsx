@@ -18,21 +18,32 @@ import { Matrix } from './Matrix';
 import { Scientific } from './Scientific';
 import { Topbar } from './Topbar';
 import { ToolPane } from './ToolPane';
+import type { ExportSubject, RegisterExports } from './lib/exportModel';
+import type { InsertBridge } from './lib/notes';
 import { LIVE_TOOLS } from './lib/shellModel';
 import type { LiveToolId, ToolDrafts, ToolId } from './lib/shellModel';
+
+/** Everything a tool pane needs from the shell besides its own state. */
+interface ToolWiring {
+  storage?: Pick<StorageApi, 'get' | 'set'> | null;
+  registerExports?: RegisterExports | null;
+  insert?: InsertBridge | null;
+}
 
 /**
  * The shipped tool for a pane. All three of v1's tools have landed as of MATH5, so this never
  * returns null in practice — `ToolPane`'s placeholder fallback stays as the contract for a
  * tool that has not shipped (Geometry and 3D, if either is ever promoted off the roadmap).
  */
-function toolFor(
-  tool: LiveToolId,
-  storage?: Pick<StorageApi, 'get' | 'set'> | null,
-): ReactNode {
-  if (tool === 'graphing') return <Graphing storage={storage} />;
-  if (tool === 'scientific') return <Scientific storage={storage} />;
-  return <Matrix storage={storage} />;
+function toolFor(tool: LiveToolId, wiring: ToolWiring): ReactNode {
+  const { storage, registerExports, insert } = wiring;
+  if (tool === 'graphing') {
+    return <Graphing storage={storage} registerExports={registerExports} />;
+  }
+  if (tool === 'scientific') {
+    return <Scientific storage={storage} registerExports={registerExports} insert={insert} />;
+  }
+  return <Matrix storage={storage} registerExports={registerExports} />;
 }
 
 export function MathShell({
@@ -40,6 +51,9 @@ export function MathShell({
   drafts,
   previews,
   storage,
+  registerExports,
+  subjectsFor,
+  insert,
   onSelectTool,
   onDraftChange,
 }: {
@@ -53,12 +67,26 @@ export function MathShell({
    * the `storage` permission — the tools still work, they just start empty every time.
    */
   storage?: Pick<StorageApi, 'get' | 'set'> | null;
+  /**
+   * MATH6's export wiring, both halves owned by {@link MathPanel}: tools register what they
+   * have worth exporting, and the topbar asks the *active* tool's registration when its menu
+   * opens. Absent leaves the menu empty rather than breaking the shell.
+   */
+  registerExports?: RegisterExports | null;
+  subjectsFor?: (tool: LiveToolId) => ExportSubject[];
+  /** the notes bridge (MATH6), for the topbar's and the tape rows' insert actions. */
+  insert?: InsertBridge | null;
   onSelectTool(tool: ToolId): void;
   onDraftChange(tool: LiveToolId, src: string): void;
 }) {
   return (
     <div className="atlas-math">
-      <Topbar activeTool={activeTool} onSelectTool={onSelectTool} />
+      <Topbar
+        activeTool={activeTool}
+        onSelectTool={onSelectTool}
+        subjects={() => subjectsFor?.(activeTool) ?? []}
+        insert={insert}
+      />
       <div className="tool-area">
         {LIVE_TOOLS.map((tool) => (
           <ToolPane
@@ -69,7 +97,7 @@ export function MathShell({
             preview={previews[tool] ?? null}
             onDraftChange={(src) => onDraftChange(tool, src)}
           >
-            {toolFor(tool, storage)}
+            {toolFor(tool, { storage, registerExports, insert })}
           </ToolPane>
         ))}
       </div>

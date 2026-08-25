@@ -15,7 +15,6 @@ import {
   previewScientific,
   recallSources,
   stepRecall,
-  tapeRowLatex,
   usesAngleFunction,
 } from '../lib/eval';
 import type { TapeRow } from '../lib/eval';
@@ -231,16 +230,7 @@ describe('history recall (↑ / ↓)', () => {
   });
 });
 
-describe('copy as LaTeX', () => {
-  it('serializes a row as expression = result', () => {
-    expect(tapeRowLatex(row('√(2)'))).toBe('\\sqrt{2} = 1.4142136');
-    expect(tapeRowLatex(row('12! / 10!'))).toBe('\\frac{12!}{10!} = 132');
-  });
-
-  it('falls back to the typed text when the line will not parse', () => {
-    expect(tapeRowLatex({ ...row('1+1'), src: '2 +(' })).toBe('2 +( = 2');
-  });
-});
+/* Copy-as-LaTeX moved to `lib/latex.ts` with MATH6 — see `latex.test.ts` for its goldens. */
 
 describe('previewScientific — the ghost result', () => {
   it('shows the value a committed line would produce', () => {

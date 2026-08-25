@@ -33,6 +33,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { MutableRefObject } from 'react';
 import type { Chart, FunctionPlotDatum, FunctionPlotOptions } from 'function-plot';
 import { loadFunctionPlot } from './lib/plot';
 import { SUGGESTION_CHIPS, graphColorVar, windowReadout } from './lib/graphModel';
@@ -76,6 +77,7 @@ export function GraphCanvas({
   trace,
   onPickSuggestion,
   dispatch,
+  plotHostRef,
 }: {
   curves: readonly GraphCurve[];
   viewport: GraphViewport;
@@ -83,8 +85,14 @@ export function GraphCanvas({
   trace: ResolvedTrace | null;
   onPickSuggestion(src: string): void;
   dispatch(action: GraphAction): void;
+  /**
+   * Shares function-plot's mount node with the tool, so MATH6's snapshot can serialize the
+   * SVG the chart drew. Optional — the canvas owns its own node when nobody asks for it.
+   */
+  plotHostRef?: MutableRefObject<HTMLDivElement | null>;
 }) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
+  const ownHostRef = useRef<HTMLDivElement | null>(null);
+  const hostRef = plotHostRef ?? ownHostRef;
   const chartRef = useRef<Chart | null>(null);
   const optionsRef = useRef<FunctionPlotOptions | null>(null);
   const appliedViewport = useRef<GraphViewport | null>(null);

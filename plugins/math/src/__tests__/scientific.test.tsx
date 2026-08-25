@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { KeypadHint, Scientific } from '../Scientific';
 import { Keypad } from '../Keypad';
 import { Tape } from '../Tape';
+import { INSERT_TITLE, INSERT_UNAVAILABLE_TITLE, makeInsertBridge } from '../lib/notes';
+import type { NotesApi } from '@atlas/plugin-sdk';
 import { initialSciState, reduceSci } from '../lib/sciModel';
 import type { SciAction, SciState } from '../lib/sciModel';
 
@@ -26,6 +28,12 @@ function tapeState(): SciState {
 
 function renderTape(state: SciState) {
   return renderToStaticMarkup(<Tape rows={state.tape} />);
+}
+
+/** A host that implements MATH7's bridge, for the rows that need one to be live. */
+function notesStub(): NotesApi {
+  const landed = () => Promise.resolve({ ok: true, placement: 'cursor' as const });
+  return { insertLatex: landed, insertText: landed, insertImage: landed };
 }
 
 describe('Scientific card (MATH4)', () => {
@@ -94,11 +102,23 @@ describe('the tape rows', () => {
     expect(html.match(/class="tape-actions"/g)).toHaveLength(2);
   });
 
-  it('offers copy / copy-as-LaTeX on hover, with insert-into-note disabled until MATH6', () => {
-    const html = renderTape(enter(initialSciState, '√(2)'));
+  it('offers copy / copy-as-LaTeX on hover, and insert once the bridge is there (MATH6)', () => {
+    const state = enter(initialSciState, '√(2)');
+    const html = renderToStaticMarkup(
+      <Tape rows={state.tape} insert={makeInsertBridge(notesStub())} />,
+    );
     expect(html).toContain('title="Copy result"');
     expect(html).toContain('title="Copy as LaTeX"');
-    const insert = html.indexOf('title="Insert into note');
+    const insert = html.indexOf(`title="${INSERT_TITLE}"`);
+    expect(insert).toBeGreaterThan(-1);
+    expect(html.slice(html.lastIndexOf('<button', insert), insert)).not.toContain('disabled');
+  });
+
+  it('keeps insert disabled — carrying its reason — on a host with no notes bridge', () => {
+    // MATH7 is Dashboard-side; a host without it gets a control that says so rather than one
+    // that looks live and does nothing.
+    const html = renderTape(enter(initialSciState, '√(2)'));
+    const insert = html.indexOf(`title="${INSERT_UNAVAILABLE_TITLE}"`);
     expect(insert).toBeGreaterThan(-1);
     expect(html.slice(html.lastIndexOf('<button', insert), insert)).toContain('disabled');
   });

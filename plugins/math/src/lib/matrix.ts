@@ -630,19 +630,8 @@ export function resultText(result: MatrixResult): string {
   return result.cells.map((row) => row.map((value) => formatNumber(value)).join('\t')).join('\n');
 }
 
-/** The result as LaTeX: a bare number, or the spec's `bmatrix`. */
-export function resultLatex(result: MatrixResult): string {
-  if (result.kind === 'scalar') {
-    const text = formatNumber(result.value);
-    if (text === '∞') return '\\infty';
-    if (text === '−∞') return '-\\infty';
-    return text;
-  }
-  const body = result.cells
-    .map((row) => row.map((value) => formatNumber(value).replace('−', '-')).join(' & '))
-    .join(' \\\\ ');
-  return `\\begin{bmatrix}${body}\\end{bmatrix}`;
-}
+/* A result's LaTeX (`matrixResultLatex`) lives in `lib/latex.ts` (MATH6) with the rest of the
+ * plugin's TeX serialization — this file owns the numbers, not their notation. */
 
 /**
  * A result that `→ C` can save. Only a matrix result becomes a matrix — the wireframe puts

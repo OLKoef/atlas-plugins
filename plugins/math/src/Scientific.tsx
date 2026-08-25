@@ -18,6 +18,9 @@ import type { StorageApi } from '@atlas/plugin-sdk';
 import { Keypad } from './Keypad';
 import { Tape } from './Tape';
 import { ANGLE_MODES, previewScientific } from './lib/eval';
+import { scientificExportSubjects } from './lib/exportModel';
+import type { ExportProvider, RegisterExports } from './lib/exportModel';
+import type { InsertBridge } from './lib/notes';
 import { initialSciState, reduceSci } from './lib/sciModel';
 import { loadScientific, saveScientific, scientificSnapshot } from './lib/persist';
 
@@ -48,7 +51,17 @@ export function KeypadHint() {
   );
 }
 
-export function Scientific({ storage }: { storage?: Pick<StorageApi, 'get' | 'set'> | null }) {
+export function Scientific({
+  storage,
+  registerExports,
+  insert,
+}: {
+  storage?: Pick<StorageApi, 'get' | 'set'> | null;
+  /** MATH6: what the topbar's export action offers while this tool is the active one. */
+  registerExports?: RegisterExports | null;
+  /** MATH6: the notes bridge behind every tape row's insert action. */
+  insert?: InsertBridge | null;
+}) {
   const [state, dispatch] = useReducer(reduceSci, initialSciState);
 
   const preview = useMemo(
@@ -107,6 +120,18 @@ export function Scientific({ storage }: { storage?: Pick<StorageApi, 'get' | 'se
     if (tape) tape.scrollTop = tape.scrollHeight;
   }, [state.tape]);
 
+  // 4 · Offer this tool's exports to the topbar (MATH6) — a stable provider reading the
+  // latest tape, so committing a line never re-registers.
+  const latest = useRef<ExportProvider>(() => []);
+  useEffect(() => {
+    latest.current = () => scientificExportSubjects(state.tape);
+  });
+  useEffect(() => {
+    if (!registerExports) return;
+    registerExports('scientific', () => latest.current());
+    return () => registerExports('scientific', null);
+  }, [registerExports]);
+
   return (
     <div className="sci-area">
       <div className="sci-card">
@@ -134,7 +159,7 @@ export function Scientific({ storage }: { storage?: Pick<StorageApi, 'get' | 'se
           </button>
         </div>
 
-        <Tape rows={state.tape} containerRef={tapeRef} />
+        <Tape rows={state.tape} containerRef={tapeRef} insert={insert} />
 
         <div className="sci-input-row">
           <span className="sci-prompt" aria-hidden="true">

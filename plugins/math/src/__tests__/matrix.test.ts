@@ -14,7 +14,6 @@ import {
   parseCellText,
   resizeCells,
   resizeMatrix,
-  resultLatex,
   resultText,
   setMatrixCell,
   transposeCells,
@@ -412,12 +411,7 @@ describe('results (MATH5)', () => {
     ).toBe('1\t2\n3\t4');
   });
 
-  it('serializes a matrix result as a LaTeX bmatrix', () => {
-    expect(resultLatex({ kind: 'matrix', rows: 2, cols: 2, cells: [[1, -2], [3, 4]] })).toBe(
-      '\\begin{bmatrix}1 & -2 \\\\ 3 & 4\\end{bmatrix}',
-    );
-    expect(resultLatex({ kind: 'scalar', value: 8 })).toBe('8');
-  });
+  /* A result's LaTeX moved to `lib/latex.ts` with MATH6 — see `latex.test.ts`. */
 
   it('saves a result as a new matrix, cells and size intact', () => {
     const result = ran('A × B');

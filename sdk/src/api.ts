@@ -104,6 +104,50 @@ export interface SettingsApi {
   readLegacy(key: string): Promise<unknown>;
 }
 
+/**
+ * Where an insert landed. The *bridge* reports this, rather than the plugin guessing: only
+ * the host knows whether a note was open, and `'none'` is a real outcome (nothing to insert
+ * into) rather than a failure — the host toasts, the plugin does not have to.
+ */
+export type NotesInsertPlacement = 'cursor' | 'appended' | 'none';
+
+export interface NotesInsertResult {
+  ok: boolean;
+  placement: NotesInsertPlacement;
+  /** the note that received the insert, when one did. */
+  noteId?: string;
+}
+
+/** A PNG (or other raster) a plugin hands the notes image pipeline. */
+export interface NotesImageInput {
+  /** the image as a `data:image/png;base64,…` URL. */
+  dataUrl: string;
+  /** alt text / caption for the inserted image. */
+  alt?: string;
+}
+
+/**
+ * `notes:insert` — the Dashboard-side notes bridge (MATH7). Insert text or LaTeX at the
+ * active note's cursor, or attach an image through the notes image pipeline (IMG1).
+ *
+ * **Optional on {@link AtlasPluginApi} by design.** A host built before MATH7 simply has no
+ * `notes` namespace, and that absence is exactly what a plugin gates its insert actions on —
+ * a declared-but-throwing method would make "is this available?" a question only a failed
+ * user action could answer.
+ */
+export interface NotesApi {
+  /**
+   * Insert LaTeX at the active note's cursor, for the notes editor's KaTeX rendering. The
+   * plugin passes **bare** LaTeX (no `$…$`): the host owns the note format, so it is the
+   * host that wraps it, using `display` to choose block vs inline math.
+   */
+  insertLatex(latex: string, opts?: { display?: boolean }): Promise<NotesInsertResult>;
+  /** Insert plain text/markdown at the active note's cursor. */
+  insertText(text: string): Promise<NotesInsertResult>;
+  /** Attach an image via the notes image pipeline and insert it inline. */
+  insertImage(image: NotesImageInput): Promise<NotesInsertResult>;
+}
+
 export interface AtlasPluginApi {
   /** equals {@link ATLAS_PLUGIN_API_VERSION} of the host that mounted this plugin. */
   readonly apiVersion: number;
@@ -119,4 +163,9 @@ export interface AtlasPluginApi {
   disk: DiskApi;
   /** configured-model chat bridge (DISK10); permission-gated. */
   ai: AiApi;
+  /**
+   * Notes insert bridge (MATH7); permission-gated on `notes:insert`. Absent on hosts older
+   * than MATH7 — see {@link NotesApi} for why that absence is the intended gate.
+   */
+  notes?: NotesApi;
 }
