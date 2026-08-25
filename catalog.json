@@ -10,6 +10,17 @@
       "minAtlasApi": 1,
       "downloadUrl": "https://github.com/OLKoef/atlas-plugins/releases/download/disk-manager-v1.0.0/disk-manager-v1.0.0.zip",
       "sha256": "f165c54818f87068730b812fe94dd8495ea3aefb29bfbff0da8b5b8cfd79bb38"
+    },
+    {
+      "id": "math",
+      "name": "Math",
+      "version": "1.0.0",
+      "type": "tool",
+      "description": "A Desmos-inspired math suite in one tool — graphing, a scientific calculator with tape, and matrices at any size.",
+      "author": "Atlas",
+      "minAtlasApi": 1,
+      "downloadUrl": "https://github.com/OLKoef/atlas-plugins/releases/download/math-v1.0.0/math-v1.0.0.zip",
+      "sha256": "b9fbab696ec80029b23ef5542d7e311df0baa2d5a9145b8f07bec40b67b35c03"
     }
   ]
 }

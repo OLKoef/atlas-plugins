@@ -1,7 +1,7 @@
 {
   "id": "math",
   "name": "Math",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "tool",
   "entry": "index.js",
   "styles": "styles.css",
