@@ -16,7 +16,7 @@ atlas-plugins/
 ├── plugins/                # authored / built plugins (one dir per plugin id)
 │   ├── example-widget/     # reference plugin: the create-plugin template, rendered
 │   ├── disk-manager/       # DISK5+ Disk Manager (type:"tool") — Visualize + Triage + AI-reorg + Session-summary screens
-│   └── math/               # MATH1+ Math (type:"tool") — tool-tab shell over Graphing (rail + canvas + sliders/trace) / Scientific / Matrix
+│   └── math/               # MATH1+ Math (type:"tool") — tool-tab shell over Graphing (rail + canvas + sliders/trace) / Scientific (tape + REPL + keypad) / Matrix
 ├── scripts/                # release/catalog pipeline (build-catalog.mjs + lib/release.mjs)
 ├── .github/workflows/      # release-plugin.yml — CI on a `<id>-v<semver>` tag
 ├── structure.md            # this file
@@ -170,10 +170,10 @@ Logic is split from React so it unit-tests in the shared node/vitest run with no
 
 Full-sidebar plugin: a Desmos/GeoGebra-inspired suite where **one** plugin hosts three tools
 behind topbar tabs. MATH1 ships the scaffold, manifest, and the **tool-tab shell**; MATH2/3
-complete Graphing (rail + canvas, then sliders / trace / persistence), MATH4 Scientific (tape +
-keypad), MATH5 Matrix, MATH6 export/insert (needs the Dashboard-side MATH7 `notes:insert`
-bridge). Same split as Disk Manager — logic outside React, so it unit-tests in the shared
-node/vitest run.
+complete Graphing (rail + canvas, then sliders / trace / persistence); MATH4 completes
+Scientific (tape + REPL + collapsible keypad); MATH5 Matrix, MATH6 export/insert (needs the
+Dashboard-side MATH7 `notes:insert` bridge). Same split as Disk Manager — logic outside React,
+so it unit-tests in the shared node/vitest run.
 
 - `manifest.json` — `type:"tool"`, id `math`, `minAtlasApi:1`, permissions `["storage"]`
   (`notes:insert` is added by MATH6); validated by the SDK's `parseManifest` in
@@ -197,7 +197,13 @@ node/vitest run.
   `loadGraphing` / `saveGraphing` on top of the generic `saveSection` read-modify-write. Every
   field falls back individually (an out-of-palette colour, an inverted slider range, a
   half-written viewport) instead of rejecting the row, and unknown keys *inside* `graphing`
-  round-trip the same way the unknown top-level sections do.
+  round-trip the same way the unknown top-level sections do. MATH4 adds the **`scientific`
+  section** the same way — `parseScientificSection` / `serializeScientificSection` /
+  `scientificSnapshot` / `loadScientific` / `saveScientific` for
+  `{ angleMode, keypadCollapsed, tape }`. A tape row is a *record*, so unlike a slider it is
+  dropped rather than repaired when half-written, the snapshot omits failed rows (a refusal is
+  a response to a line, not history), and both ends trim to `TAPE_LIMIT` so a hand-edited blob
+  cannot grow the tape past the live model's bound.
 - `src/lib/mathEngine.ts` — the shared **mathjs** instance (bundled into the plugin zip; it
   backs all three tools), hardened at birth with `import` and `createUnit` disabled so a
   persisted expression can't reconfigure mathjs. `previewExpression` is the wireframe's live
@@ -237,6 +243,28 @@ node/vitest run.
   hidden, deleted or unparseable. `formatTraceLabel` is the `(1.571, 2.000)` tooltip.
 - `src/lib/plot.ts` — `loadFunctionPlot`, the lazy dynamic-import seam for function-plot
   (bundled into the zip but only loaded when the Graphing canvas first renders).
+- `src/lib/eval.ts` — MATH4, the Scientific evaluation model. **DEG is a scope, not engine
+  state**: `angleScope('deg')` hands one evaluation degree-flavoured circular functions (the
+  hyperbolics carry no angle, so they are deliberately absent), which is what makes a tape row's
+  stamped mode true rather than decorative — switching mode cannot retroactively change a
+  printed row. `evaluateScientific` runs everything through MATH2's `parseExpression` first
+  (`applyCalculatorNames` renames the keypad's `ln`/`log` to mathjs's `log`/`log10` in one pass
+  in front of it, so the tape shows what was typed while mathjs evaluates a whitelisted string),
+  names an unresolvable symbol instead of throwing, and never mutates the shared engine.
+  `ans` binds the previous **value**, so chaining stays exact past the 8-digit display; the tape
+  helpers (`makeTapeRow`, `appendTapeRow` with `TAPE_LIMIT`, `hydrateTapeRow`, `ansFromTape`)
+  and the ↑/↓ walk (`stepRecall`, which stashes and returns the interrupted line) live here too,
+  plus `tapeRowLatex` for the row's TeX action. `previewScientific` is the input line's ghost —
+  the same evaluation, silent on failure.
+- `src/lib/keypad.ts` — MATH4, the two locked grids as data (`FUNCTION_KEYS` / `NUMBER_KEYS`,
+  wireframe order; ↵'s span is CSS's) plus `resolveKey`'s `2nd` inverse layer. Keys insert what
+  the user would have typed, glyphs included (`√(`, `×`, `π`) — `lib/expr.ts` folds those — and
+  append at the end of the line rather than tracking a caret the text field already owns.
+- `src/lib/sciModel.ts` — MATH4, the Scientific reducer: ↵ commits the line under the mode in
+  force and makes the result `ans` (a failed line lands on the tape but leaves `ans` alone),
+  "Clear history" drops `ans` with the tape, the keypad writes into the same `input`, and
+  `hydrate` is gated by `hydrated` — raised by committing / mode-switching / collapsing, but
+  **not** by typing, since a draft is not persisted state for a restore to clobber.
 - `src/ExpressionRail.tsx` / `src/GraphCanvas.tsx` / `src/Graphing.tsx` — the Graphing
   surfaces: the wireframe's fresh rail (hairline rows, index gutter + swatch, actions on
   hover/selection, inline error message) and the canvas — function-plot draws pan/zoom, unit
@@ -250,15 +278,28 @@ node/vitest run.
   drag re-samples the same compiled expression instead of rewriting it. `Graphing.tsx` owns the
   three effects around all of it: restore-once, a debounced save (an animating slider must not
   write the blob per frame), and the ▷ interval that dispatches `tickAnimation`.
+- `src/Scientific.tsx` / `src/Tape.tsx` / `src/Keypad.tsx` — the Scientific surfaces: the
+  wireframe's `.sci-card` (RAD|DEG toggle + "Clear history" head, tape, `›` input row with the
+  ghost result and the keyboard toggle, keypad) and, when collapsed, `KeypadHint` — pure-REPL
+  mode's footer spelling the same shortcuts out. `Tape.tsx` shows the mode tag only on rows an
+  angle function decided, keeps a failed line as a row carrying its reason, and reveals
+  copy / copy-as-LaTeX on hover with **insert-into-note disabled** (real action, unbridged until
+  MATH6/MATH7 — a disabled control with a reason says that where a missing one looks like a
+  gap); the copy confirmation is local component state, so the tool needs no `ui` API. Keypad
+  presses `preventDefault` on mousedown so the caret never leaves the input line.
+  `Scientific.tsx` owns the reducer plus restore-once, a debounced save, and the scroll-to-newest
+  effect, and binds `↵` / `↑` / `↓` / `Esc` **on the input** rather than the document, so the
+  plugin never swallows a key the host wanted.
 - `src/Topbar.tsx` / `src/ToolPane.tsx` / `src/MathShell.tsx` — the presentational shell
   ported from `MathPluginApproved.html` (`.plugin-topbar`, `.tool-tabs`, `.soon-tag`): ∑ brand
   mark, ARIA tablist, one pane per live tool. **All three panes render on every pass** — the
   inactive ones carry `hidden` rather than unmounting — which is what makes "each tool keeps
-  its state while hidden" hold for tool-local state once MATH2/4/5 fill the panes in. The
-  topbar's right-hand insert/settings actions are deliberately not rendered yet (MATH6/MATH7).
-  `MathShell` also passes `storage` through to the tools that persist their own section
-  (MATH3: Graphing), which stays optional — without the permission the tools still work, they
-  just start empty.
+  its state while hidden" hold for tool-local state, now cashed in by Graphing's rail (MATH2)
+  and Scientific's tape (MATH4); only Matrix still renders the MATH1 placeholder body, until
+  MATH5. The topbar's right-hand insert/settings actions are deliberately not rendered yet
+  (MATH6/MATH7). `MathShell` also passes `storage` through to the tools that persist their own
+  section (MATH3: Graphing, MATH4: Scientific), which stays optional — without the permission
+  the tools still work, they just start empty.
 - `src/Panel.tsx` — the stateful panel: restores `shell.lastTool` once on mount and writes it
   back on each switch (never before the restore lands, or the default would clobber storage).
   `src/index.tsx` default-exports the `AtlasPlugin` (`{ manifest, Panel }`) and imports
@@ -280,7 +321,19 @@ node/vitest run.
   `graphModel.test.ts` with the slider→scope→re-plot path, the trace lifecycle and hydration,
   extends `persist.test.ts` with the `graphing` section (section round-trip, unknown-key
   forward-compat at both levels, and a full state → disk → state round-trip that re-plots
-  identically), and extends `graphing.test.tsx` with the rendered slider cell.
+  identically), and extends `graphing.test.tsx` with the rendered slider cell. MATH4 adds
+  `eval.test.ts` (the wireframe's own tape rows reproduced; trig in both modes incl. degrees out
+  of the inverse functions and non-angular functions left alone; `ans` chaining exact past the
+  displayed rounding and refused before the first result; the whitelist still in front of every
+  evaluation; the `ln`/`log` rename in one pass; recall walking, stopping and restoring the
+  interrupted line; LaTeX golden strings), `sciModel.test.ts` (the two acceptance cruxes — a
+  mode switch never rewrites a printed row, and a late restore loses to a committed line but not
+  to a half-typed one — plus keypad presses, `2nd` spent by the next key, the tape bound, and
+  clear-history taking `ans` with it), `scientific.test.tsx` (the rendered card, DEG active,
+  keypad up vs. the collapsed hint, the tag on only the angular row, a failed row with no
+  actions, insert-into-note disabled), and extends `persist.test.ts` with the `scientific`
+  section (row dropping, mode narrowing, the trim, and a state → disk → state round-trip that
+  keeps chaining) and `shell.test.tsx` with the shipped pane.
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 

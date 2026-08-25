@@ -1,5 +1,35 @@
 # Documentation log
 
+### 2026-08-25 — MATH4: Scientific — tape + REPL + collapsible keypad
+
+Filled the Scientific pane with the wireframe's card. `lib/eval.ts` is the evaluation model:
+DEG is a **scope** of degree-flavoured circular functions handed to one evaluation rather than
+engine state, so a mode switch can never rewrite a row that is already printed — each row is
+stamped with the mode it was computed under and tagged (`deg` / `rad`) only when an angle
+function actually decided the answer. `ans` binds the previous *value*, so `1/3` then `ans*3` is
+exactly `1` despite the displayed result being rounded; `stepRecall` walks ↑ / ↓ through the tape
+and hands back the line the walk interrupted; failed lines stay on the tape (recallable, so a
+typo can be fixed) but never reach `ans` or storage. Everything goes through MATH2's
+`parseExpression` whitelist before mathjs sees it, with the keypad's `ln` / `log` renamed to
+mathjs's `log` / `log10` in one pass in front of that door. `lib/keypad.ts` holds the two locked
+grids as data plus the `2nd` inverse layer (spent by the next press); `lib/sciModel.ts` is the
+reducer tying tape, input line, mode and collapse together behind a `hydrated` flag — a restore
+landing after the user has committed a row loses, while one landing mid-draft does not, since a
+draft is not persisted state. `lib/persist.ts` gains the spec's `scientific` section
+(`{ angleMode, keypadCollapsed, tape }`) with the same per-field tolerance and unknown-key
+round-tripping as `graphing`, both bounded to `TAPE_LIMIT` rows. Tape-row hover reveals copy /
+copy-as-LaTeX (mathjs `toTex`, `\sqrt{2} = 1.4142136`); insert-into-note renders disabled with a
+reason until MATH6/MATH7 bridge it. Why: Scientific is the second of the three v1 tools, and the
+tape + `ans` + DEG/RAD triangle is what makes it a calculator rather than an input box. Gate:
+build clean, 498/498 tests.
+Files: plugins/math/src/lib/eval.ts, plugins/math/src/lib/keypad.ts,
+plugins/math/src/lib/sciModel.ts, plugins/math/src/lib/persist.ts,
+plugins/math/src/Scientific.tsx, plugins/math/src/Tape.tsx, plugins/math/src/Keypad.tsx,
+plugins/math/src/MathShell.tsx, plugins/math/src/ToolPane.tsx, plugins/math/src/styles.css,
+plugins/math/src/__tests__/eval.test.ts, plugins/math/src/__tests__/sciModel.test.ts,
+plugins/math/src/__tests__/scientific.test.tsx, plugins/math/src/__tests__/persist.test.ts,
+plugins/math/src/__tests__/shell.test.tsx, structure.md, documentation.md.
+
 ### 2026-08-25 — MATH3: Graphing — parameter sliders + trace + persistence
 
 Finished the Graphing tool. `lib/sliders.ts` turns a free constant into a knob: `scanFreeSymbols`
