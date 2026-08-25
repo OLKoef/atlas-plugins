@@ -80,7 +80,7 @@ const GLYPHS = new Map<string, string>(Object.entries({
   '—': '-', // — em dash
   'π': 'pi', // π
   '√': 'sqrt', // √
-  ' ': ' ', // non-breaking space
+  '\u00A0': ' ', // non-breaking space, escaped so the literal byte stays out of the file
 }));
 
 const ALLOWED_FUNCTION_SET = new Set(ALLOWED_FUNCTIONS);

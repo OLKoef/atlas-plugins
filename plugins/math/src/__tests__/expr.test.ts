@@ -86,6 +86,14 @@ describe('preprocessExpression — implicit multiplication (MATH2)', () => {
     expect(preprocessExpression('√(2)')).toBe('sqrt(2)');
   });
 
+  it('folds a non-breaking space onto a plain one', () => {
+    // Built from its code point on purpose: the literal byte is invisible in a diff and the
+    // repo's corruption gate refuses it, which is also why `GLYPHS` spells the key ` `.
+    const nbsp = String.fromCharCode(0xa0);
+    expect(preprocessExpression(`2${nbsp}x`)).toBe(preprocessExpression('2 x'));
+    expect(preprocessExpression(`sin(x)${nbsp}+${nbsp}1`)).toBe('sin(x) + 1');
+  });
+
   it('folds mathjs constant spellings onto the ones the plotter shares', () => {
     expect(preprocessExpression('pi')).toBe('PI');
     expect(preprocessExpression('π')).toBe('PI');
