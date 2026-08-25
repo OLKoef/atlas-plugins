@@ -1,5 +1,38 @@
 # Documentation log
 
+### 2026-08-25 — MATH5: Matrix — named matrices, editor + compute
+
+Filled the third and last v1 pane with the wireframe's Matrix / Matrix · Empty states: a rail of
+named matrices (`A, B, C…`), each its own size, a bracketed grid editor whose row/col steppers
+resize in place preserving entries, the four quick-op chips (`det / A⁻¹ / Aᵀ / rank`) and a
+free-form compute line (`A × B`, `2A + B`, `det(A)`) sharing one result history, and `→ C` to
+save a matrix result as the next matrix. `lib/matrix.ts` holds the values and the ops on the
+rule that **cells are text and values are numbers** — a cell mid-edit is `''`, and conversion
+happens on the way into a computation, which is where a blank cell becomes a named error rather
+than a silent zero; the compute line walks the parsed tree with its own evaluator because
+mathjs's `math.add` *broadcasts* (a 2 × 3 plus a 1 × 3 comes back a 2 × 3 instead of refusing),
+so shapes are checked at every node — which is also what lets a mismatch say which dimensions
+disagree, in the inline error treatment borrowed from the graphing rail. `rank` is ours (mathjs
+has none): Gaussian elimination with partial pivoting and a magnitude-scaled tolerance, so
+neither a matrix of millionths nor one of millions is misjudged; sizes have **no upper cap**
+(the grid scrolls) and rectangular m × n is allowed because products need it. `lib/matrixModel.ts`
+is the reducer — the chips write their source into the compute line and submit it, so one
+history has one code path, and a failed line shows inline and never enters the history — while
+`lib/persist.ts` gains the spec's `matrix` section with the same per-field tolerance and
+unknown-key round-tripping as `graphing` and `scientific`. Why: Matrix was the last unbuilt v1
+tool, so with it the Math plugin's three panes are all real and the shell's "every tool keeps
+its state while hidden" promise is finally paid off on all three. Gate: build clean,
+581/581 tests.
+Files: plugins/math/src/lib/matrix.ts, plugins/math/src/lib/matrixModel.ts,
+plugins/math/src/lib/clipboard.ts, plugins/math/src/lib/persist.ts,
+plugins/math/src/lib/expr.ts, plugins/math/src/Matrix.tsx, plugins/math/src/MatrixRail.tsx,
+plugins/math/src/MatrixEditor.tsx, plugins/math/src/MatrixResults.tsx,
+plugins/math/src/MathShell.tsx, plugins/math/src/ToolPane.tsx, plugins/math/src/Panel.tsx,
+plugins/math/src/Tape.tsx, plugins/math/src/styles.css,
+plugins/math/src/__tests__/matrix.test.ts, plugins/math/src/__tests__/matrixModel.test.ts,
+plugins/math/src/__tests__/matrixTool.test.tsx, plugins/math/src/__tests__/persist.test.ts,
+plugins/math/src/__tests__/shell.test.tsx, structure.md, documentation.md.
+
 ### 2026-08-25 — MATH4: Scientific — tape + REPL + collapsible keypad
 
 Filled the Scientific pane with the wireframe's card. `lib/eval.ts` is the evaluation model:

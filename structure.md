@@ -386,7 +386,21 @@ React, so it unit-tests in the shared node/vitest run.
   keypad up vs. the collapsed hint, the tag on only the angular row, a failed row with no
   actions, insert-into-note disabled), and extends `persist.test.ts` with the `scientific`
   section (row dropping, mode narrowing, the trim, and a state → disk → state round-trip that
-  keeps chaining) and `shell.test.tsx` with the shipped pane.
+  keeps chaining) and `shell.test.tsx` with the shipped pane. MATH5 adds `matrix.test.ts` (the
+  AC's ops on known matrices — the wireframe's own determinant, an inverse checked by
+  `A × A⁻¹ = I` and refused when singular, rectangular transpose, rank at either end of the
+  magnitude scale; the resize-preserve **round-trip**, grow-then-shrink returning the matrix you
+  started with, both dimensions independently; every dimension-mismatch path naming the
+  dimensions that disagree, including the element-wise case mathjs would have broadcast; and
+  save-result-as-matrix with cells and size intact), `matrixModel.test.ts` (rail create/delete
+  and the freed name, a custom n × n with no upper cap, chips and typing sharing one history, a
+  failed line staying out of it, `→ C` creating the matrix the button offered and that matrix
+  then being computable by name, the late-restore rule), `matrixTool.test.tsx` (the rendered
+  empty hero and rail glyphs, the bracketed grid in its scroller for a large n, steppers floored,
+  a mismatch carrying the graphing rail's inline error treatment, `→ C` offered on matrix results
+  only), and extends `persist.test.ts` with the `matrix` section (unusable entries dropped, a
+  declared size kept over disagreeing cells, the history trim, and a state → disk → state
+  round-trip — plus the three tools' saves proven not to drop each other).
 
 ## `scripts/` + `.github/` — catalog pipeline (PL15)
 
