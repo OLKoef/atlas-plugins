@@ -2,10 +2,10 @@
  * Math — a tool's pane inside the shell (MATH1).
  *
  * Each live tool gets one pane. A pane whose tool has shipped renders that tool as its
- * `children` (MATH2: Graphing's rail + canvas); the rest fall back to the MATH1 placeholder
- * body — the one thing every tool's wireframe leads with, its draft input line (Scientific's
- * `›` input row, Matrix's compute line) — which doubles as the per-tool state the shell
- * proves it retains while the pane is hidden. MATH4 / MATH5 replace those in turn.
+ * `children` (MATH2: Graphing's rail + canvas; MATH4: Scientific's tape + keypad); the rest
+ * fall back to the MATH1 placeholder body — the one thing every tool's wireframe leads with,
+ * its draft input line (Matrix's compute line) — which doubles as the per-tool state the
+ * shell proves it retains while the pane is hidden. MATH5 replaces the last of them.
  *
  * Panes are never unmounted on a tool switch — only hidden — so a shipped tool's own local
  * component state survives a switch too.
@@ -75,7 +75,7 @@ export function ToolPane({
   );
 }
 
-/** MATH1's pane body, still standing in for the tools MATH4 / MATH5 have yet to build. */
+/** MATH1's pane body, still standing in for the Matrix tool MATH5 has yet to build. */
 function PlaceholderBody({
   copy,
   draft,

@@ -1,8 +1,8 @@
 /*
- * Math plugin styles (MATH1 + MATH2). Ported from MathPluginApproved.html but scoped under
- * `.atlas-math` (tokens + component classes) so the plugin can never clobber the host's
- * global CSS. Covers the plugin topbar + tool tabs, the tool-pane frame, and the graphing
- * rail + canvas; MATH4/MATH5 add the scientific tape + keypad and the matrix rail + editor
+ * Math plugin styles (MATH1 + MATH2 + MATH4). Ported from MathPluginApproved.html but scoped
+ * under `.atlas-math` (tokens + component classes) so the plugin can never clobber the host's
+ * global CSS. Covers the plugin topbar + tool tabs, the tool-pane frame, the graphing rail +
+ * canvas, and the scientific tape + input line + keypad; MATH5 adds the matrix rail + editor
  * styling on top of the same tokens.
  */
 
@@ -14,8 +14,10 @@
   --text-secondary: #565b6b;
   --text-tertiary: #9da3b4;
   --accent: #4c5de6;
+  --accent-hover: #3a4cd4;
   --accent-subtle: rgba(76, 93, 230, 0.1);
   --accent-subtle-hover: rgba(76, 93, 230, 0.18);
+  --text-on-accent: #ffffff;
   --destructive: #d93f3f;
   --destructive-subtle: rgba(217, 63, 63, 0.1);
   --success: #2a9060;
@@ -62,6 +64,7 @@
   --text-secondary: #8b90a8;
   --text-tertiary: #565b6b;
   --accent: #7b8ef8;
+  --accent-hover: #8f9ff9;
   --accent-subtle: rgba(123, 142, 248, 0.12);
   --accent-subtle-hover: rgba(123, 142, 248, 0.22);
   --destructive: #f0554a;
@@ -805,4 +808,391 @@
   border-color: var(--accent);
   color: var(--accent);
   background: var(--accent-subtle);
+}
+
+/* ------------------------------------------------------------------
+   Scientific (MATH4) — tape + input line + collapsible keypad
+   ------------------------------------------------------------------ */
+.atlas-math .sci-area {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.atlas-math .sci-card {
+  width: 640px;
+  margin: 20px 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.atlas-math .sci-head {
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.atlas-math .deg-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+}
+
+.atlas-math .deg-btn {
+  height: 20px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  transition: all var(--t);
+}
+
+.atlas-math .deg-btn.deg-active {
+  background: var(--bg-elevated);
+  color: var(--accent);
+  box-shadow: var(--shadow-1);
+}
+
+.atlas-math .sci-clear-btn {
+  margin-left: auto;
+  height: 24px;
+  padding: 0 10px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: var(--size-caption);
+  color: var(--text-tertiary);
+  transition: all var(--t);
+}
+
+.atlas-math .sci-clear-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.atlas-math .sci-clear-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The tape bottom-aligns while it is short, so the newest row sits on the input line. */
+.atlas-math .tape {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.atlas-math .tape::-webkit-scrollbar {
+  width: 3px;
+}
+
+.atlas-math .tape::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 99px;
+}
+
+.atlas-math .tape-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  transition: background var(--t);
+}
+
+.atlas-math .tape-row:hover {
+  background: var(--bg-secondary);
+}
+
+.atlas-math .tape-expr {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.atlas-math .tape-result {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* A failed line keeps its row — the reason reads where the result would have been. */
+.atlas-math .tape-result-failed {
+  font-family: var(--font);
+  font-size: var(--size-caption);
+  font-weight: 500;
+  color: var(--destructive);
+}
+
+.atlas-math .tape-unit-tag {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  align-self: center;
+}
+
+.atlas-math .tape-actions {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-1);
+  padding: 2px;
+}
+
+.atlas-math .tape-row:hover .tape-actions,
+.atlas-math .tape-row:focus-within .tape-actions {
+  display: flex;
+}
+
+.atlas-math .tape-act-btn {
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  transition: all var(--t);
+}
+
+.atlas-math .tape-act-btn:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Insert-into-note is real but unbridged until MATH6/MATH7 — disabled, not hidden. */
+.atlas-math .tape-act-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.atlas-math .tape-act-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.atlas-math .sci-input-row {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.atlas-math .sci-prompt {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  user-select: none;
+}
+
+.atlas-math .sci-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.atlas-math .sci-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.atlas-math .sci-preview {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.atlas-math .kb-toggle {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: all var(--t);
+  flex-shrink: 0;
+}
+
+.atlas-math .kb-toggle:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.atlas-math .kb-toggle.kb-on {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.atlas-math .kb-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Pure-REPL mode: the keypad's shortcuts spelled out where the keypad was. */
+.atlas-math .sci-kbd-hint {
+  padding: 6px 16px 10px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.atlas-math .kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  height: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  vertical-align: middle;
+}
+
+.atlas-math .keypad {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.atlas-math .keypad-fns {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+
+.atlas-math .keypad-nums {
+  width: 230px;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.atlas-math .key {
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--t);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.atlas-math .key:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-1);
+}
+
+.atlas-math .key-digit {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.atlas-math .key-op {
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.atlas-math .key-mod {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* The 2nd layer: the engaged toggle and every key currently showing its inverse face. */
+.atlas-math .key-shifted {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.atlas-math .key-enter {
+  grid-column: 5;
+  grid-row: 2 / 5;
+  height: auto;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  font-size: 16px;
+}
+
+.atlas-math .key-enter:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }

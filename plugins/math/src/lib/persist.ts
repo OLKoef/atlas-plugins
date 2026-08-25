@@ -1,5 +1,5 @@
 /**
- * Math — versioned plugin-storage (de)serialization (MATH1, extended by MATH3).
+ * Math — versioned plugin-storage (de)serialization (MATH1, extended by MATH3 / MATH4).
  *
  * The on-disk shape is the one in the Math spec's data model: a single JSON blob with a
  * `version`, a `shell` section, and one section per tool.
@@ -10,14 +10,17 @@
  *   "graphing": { "exprs": [ { "src": "a·sin(x)", "color": "blue", "visible": true } ],
  *     "sliders": [ { "symbol": "a", "value": 2, "min": -5, "max": 5, "step": 0.1 } ],
  *     "viewport": { "xDomain": [-6.7, 6.7], "yDomain": [-4.9, 4.9] } },
- *   "scientific": { … }, "matrix": { … } }
+ *   "scientific": { "angleMode": "deg", "keypadCollapsed": false,
+ *     "tape": [ { "src": "sin(45)", "result": "0.7071068", "angleMode": "deg" } ] },
+ *   "matrix": { … } }
  * ```
  *
- * MATH1 owns `shell.lastTool`; MATH3 owns `graphing`. The remaining tool sections belong to
- * MATH4/MATH5, so this module round-trips every *other* top-level key verbatim (the spec's
- * "unknown-field tolerance") — and does the same for unknown keys *inside* `graphing`.
- * Writing one section must never drop another's saved work, and a blob written by a newer
- * plugin build must survive being read and rewritten by an older one.
+ * MATH1 owns `shell.lastTool`; MATH3 owns `graphing`; MATH4 owns `scientific`. The remaining
+ * tool section belongs to MATH5, so this module round-trips every *other* top-level key
+ * verbatim (the spec's "unknown-field tolerance") — and does the same for unknown keys
+ * *inside* the sections it does own. Writing one section must never drop another's saved
+ * work, and a blob written by a newer plugin build must survive being read and rewritten by
+ * an older one.
  *
  * Nothing here trusts what it reads: the blob is user-editable JSON on disk, so every parse
  * is total (never throws, always lands on a usable value) and every expression it restores
@@ -31,6 +34,9 @@ import { DEFAULT_VIEWPORT, isGraphColor } from './graphModel';
 import type { GraphColorName, GraphState, GraphViewport } from './graphModel';
 import { sanitizeSlider } from './sliders';
 import type { SliderState } from './sliders';
+import { DEFAULT_ANGLE_MODE, TAPE_LIMIT, isAngleMode } from './eval';
+import type { AngleMode } from './eval';
+import type { SciState } from './sciModel';
 
 /** Key inside the plugin's own namespace — Atlas prefixes it with the plugin id. */
 export const MATH_STATE_KEY = 'state';
@@ -273,4 +279,118 @@ export async function saveGraphing(
   graphing: PersistedGraphing,
 ): Promise<void> {
   await saveSection(storage, GRAPHING_SECTION, serializeGraphingSection(graphing));
+}
+
+/* ------------------------------------------------------------------ *
+ * The `scientific` section (MATH4)
+ * ------------------------------------------------------------------ */
+
+export const SCIENTIFIC_SECTION = 'scientific';
+
+/** One saved tape row — the spec's `{ src, result, angleMode }`, no runtime id. */
+export interface PersistedTapeRow {
+  src: string;
+  result: string;
+  angleMode: AngleMode;
+}
+
+export interface PersistedScientific {
+  angleMode: AngleMode;
+  keypadCollapsed: boolean;
+  tape: PersistedTapeRow[];
+  /** keys inside `scientific` this build does not know — re-emitted untouched. */
+  extra: Record<string, unknown>;
+}
+
+export const emptyScientific: PersistedScientific = {
+  angleMode: DEFAULT_ANGLE_MODE,
+  keypadCollapsed: false,
+  tape: [],
+  extra: {},
+};
+
+/**
+ * Rows are dropped, never repaired: a row is a *record* of an evaluation, so a half-written
+ * one has nothing to fall back to (unlike a slider, whose range can be defaulted). The tape
+ * is trimmed to the newest {@link TAPE_LIMIT} rows on the way in as well as on the way out,
+ * so a hand-edited blob cannot grow the tape past the bound the live model keeps.
+ */
+function parseTape(raw: unknown): PersistedTapeRow[] {
+  if (!Array.isArray(raw)) return [];
+  const tape: PersistedTapeRow[] = [];
+  for (const entry of raw) {
+    if (!isPlainObject(entry)) continue;
+    if (typeof entry.src !== 'string' || typeof entry.result !== 'string') continue;
+    if (entry.src.trim() === '') continue;
+    tape.push({
+      src: entry.src,
+      result: entry.result,
+      angleMode: isAngleMode(entry.angleMode) ? entry.angleMode : DEFAULT_ANGLE_MODE,
+    });
+  }
+  return tape.length > TAPE_LIMIT ? tape.slice(tape.length - TAPE_LIMIT) : tape;
+}
+
+/** Parse the `scientific` section out of an untrusted blob. Never throws. */
+export function parseScientificSection(raw: unknown): PersistedScientific {
+  if (!isPlainObject(raw)) return emptyScientific;
+  const extra: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === 'angleMode' || key === 'keypadCollapsed' || key === 'tape') continue;
+    extra[key] = value;
+  }
+  return {
+    angleMode: isAngleMode(raw.angleMode) ? raw.angleMode : DEFAULT_ANGLE_MODE,
+    keypadCollapsed: raw.keypadCollapsed === true,
+    tape: parseTape(raw.tape),
+    extra,
+  };
+}
+
+/** Flatten back to the on-disk section shape, unknown keys first so ours always win. */
+export function serializeScientificSection(
+  state: PersistedScientific,
+): Record<string, unknown> {
+  return {
+    ...state.extra,
+    angleMode: state.angleMode,
+    keypadCollapsed: state.keypadCollapsed,
+    tape: state.tape.map((row) => ({ ...row })),
+  };
+}
+
+/**
+ * The persistable slice of the live Scientific state: the mode, the keypad's collapse, and
+ * the tape's **successful** rows. A failed row is a response to a line, not a computation —
+ * restoring "Unknown function “sec”" as history would be noise, and it is also what keeps
+ * the restored `ans` unambiguous (see `ansFromTape`).
+ */
+export function scientificSnapshot(
+  state: Pick<SciState, 'tape' | 'angleMode' | 'keypadCollapsed'>,
+  extra: Record<string, unknown> = {},
+): PersistedScientific {
+  return {
+    angleMode: state.angleMode,
+    keypadCollapsed: state.keypadCollapsed,
+    tape: state.tape
+      .filter((row) => !row.failed)
+      .map((row) => ({ src: row.src, result: row.result, angleMode: row.angleMode })),
+    extra,
+  };
+}
+
+/** Read + parse the `scientific` section (tolerant of an absent / bad value). */
+export async function loadScientific(
+  storage: Pick<StorageApi, 'get'>,
+): Promise<PersistedScientific> {
+  const state = await loadMathState(storage);
+  return parseScientificSection(state.sections[SCIENTIFIC_SECTION]);
+}
+
+/** Persist the `scientific` section without disturbing the shell or the other tools. */
+export async function saveScientific(
+  storage: Pick<StorageApi, 'get' | 'set'>,
+  scientific: PersistedScientific,
+): Promise<void> {
+  await saveSection(storage, SCIENTIFIC_SECTION, serializeScientificSection(scientific));
 }

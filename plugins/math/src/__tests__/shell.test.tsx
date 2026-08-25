@@ -80,21 +80,24 @@ describe('MathShell tool panes (MATH1)', () => {
     expect(paneIsHidden(html, 'scientific')).toBe(false);
     expect(paneIsHidden(html, 'graphing')).toBe(true);
     expect(paneIsHidden(html, 'matrix')).toBe(true);
-    // The tools still on the MATH1 placeholder keep their draft…
-    expect(html).toContain(DRAFTS.scientific);
+    // The tool still on the MATH1 placeholder keeps its draft…
     expect(html).toContain(DRAFTS.matrix);
     // …and the hidden Graphing pane is still rendered, rail and all, which is what lets its
-    // own reducer state (MATH2) survive the switch.
+    // own reducer state (MATH2) survive the switch — as does Scientific's tape (MATH4).
     expect(html).toContain('g-rail');
+    expect(html).toContain('sci-card');
   });
 
-  it('renders the shipped Graphing tool in its pane, not the placeholder card', () => {
+  it('renders the shipped tools in their panes, not the placeholder card', () => {
     const html = render('graphing');
     expect(html).toContain('class="g-tool"');
     expect(html).toContain('class="g-rail"');
     expect(html).toContain('class="g-canvas"');
-    // The other two panes are still the MATH1 placeholder.
-    expect(html.match(/class="pane-card"/g)).toHaveLength(2);
+    // MATH4's Scientific pane is the tool now, keypad and all.
+    expect(html).toContain('class="sci-card"');
+    expect(html).toContain('class="keypad"');
+    // Only Matrix is still the MATH1 placeholder, until MATH5.
+    expect(html.match(/class="pane-card"/g)).toHaveLength(1);
   });
 
   it('shows only the selected tool', () => {
@@ -104,9 +107,10 @@ describe('MathShell tool panes (MATH1)', () => {
     expect(paneIsHidden(html, 'scientific')).toBe(true);
   });
 
-  it('renders the ghost result beside the input line when there is one', () => {
-    expect(render('scientific', { scientific: '40.5' })).toContain('= 40.5');
-    // No preview for the tools that do not have one.
-    expect(render('graphing')).not.toContain('pane-preview');
+  it('renders the ghost result beside a placeholder tool’s input line', () => {
+    // MATH4 moved Scientific's own ghost result into the tool, where it knows the angle mode
+    // and `ans`; the shell-level one is what a pane still on the placeholder shows.
+    expect(render('matrix', { matrix: '40.5' })).toContain('= 40.5');
+    expect(render('matrix')).not.toContain('pane-preview');
   });
 });

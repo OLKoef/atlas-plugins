@@ -4,14 +4,20 @@ import {
   MATH_STATE_VERSION,
   emptyGraphing,
   emptyMathState,
+  emptyScientific,
   graphingSnapshot,
   loadGraphing,
   loadMathState,
+  loadScientific,
   parseGraphingSection,
   parseMathState,
+  parseScientificSection,
   saveGraphing,
   saveLastTool,
+  saveScientific,
+  scientificSnapshot,
   serializeGraphingSection,
+  serializeScientificSection,
   serializeMathState,
 } from '../lib/persist';
 import {
@@ -23,6 +29,9 @@ import {
   reduceGraph,
 } from '../lib/graphModel';
 import type { GraphState } from '../lib/graphModel';
+import { initialSciState, reduceSci } from '../lib/sciModel';
+import type { SciAction, SciState } from '../lib/sciModel';
+import { TAPE_LIMIT } from '../lib/eval';
 
 /** In-memory stand-in for the host's per-plugin `storage.*` namespace. */
 function fakeStorage(seed?: unknown) {
@@ -298,5 +307,161 @@ describe('saveGraphing / loadGraphing (MATH3)', () => {
     await saveLastTool(storage, 'matrix');
     expect(await loadGraphing(storage)).toMatchObject({ exprs: SAVED_GRAPHING.exprs });
     expect(await loadMathState(storage)).toMatchObject({ shell: { lastTool: 'matrix' } });
+  });
+});
+
+/* ================================================================== *
+ * MATH4 — the `scientific` section
+ * ================================================================== */
+
+/** The spec's data-model example for `scientific`, verbatim. */
+const SAVED_SCIENTIFIC = {
+  angleMode: 'deg',
+  keypadCollapsed: false,
+  tape: [{ src: 'sin(45)', result: '0.7071068', angleMode: 'deg' }],
+};
+
+describe('parseScientificSection (MATH4)', () => {
+  it('reads the spec’s section shape', () => {
+    const parsed = parseScientificSection(SAVED_SCIENTIFIC);
+    expect(parsed.angleMode).toBe('deg');
+    expect(parsed.keypadCollapsed).toBe(false);
+    expect(parsed.tape).toEqual(SAVED_SCIENTIFIC.tape);
+  });
+
+  it('degrades to an empty tape for an absent or malformed section', () => {
+    for (const raw of [undefined, null, 'nope', [1, 2, 3]]) {
+      expect(parseScientificSection(raw)).toEqual(emptyScientific);
+    }
+  });
+
+  it('drops rows that are not a usable record of an evaluation', () => {
+    const parsed = parseScientificSection({
+      tape: [
+        { src: '1+1', result: '2', angleMode: 'rad' },
+        { src: '2+2' }, // no result — nothing to show
+        { result: '4' }, // no expression — nothing to recall
+        { src: '  ', result: '0' },
+        'garbage',
+        null,
+      ],
+    });
+    expect(parsed.tape).toEqual([{ src: '1+1', result: '2', angleMode: 'rad' }]);
+  });
+
+  it('narrows an angle mode that is not one of the two, per row and overall', () => {
+    const parsed = parseScientificSection({
+      angleMode: 'grad',
+      keypadCollapsed: 'yes',
+      tape: [{ src: '1+1', result: '2', angleMode: 7 }],
+    });
+    expect(parsed.angleMode).toBe('deg');
+    // Only a real `true` collapses the keypad — a truthy string is not a boolean.
+    expect(parsed.keypadCollapsed).toBe(false);
+    expect(parsed.tape[0].angleMode).toBe('deg');
+  });
+
+  it('trims a hand-grown tape to the same bound the live model keeps', () => {
+    const tape = Array.from({ length: TAPE_LIMIT + 10 }, (_, index) => ({
+      src: `${index}+0`,
+      result: `${index}`,
+      angleMode: 'deg',
+    }));
+    const parsed = parseScientificSection({ tape });
+    expect(parsed.tape).toHaveLength(TAPE_LIMIT);
+    expect(parsed.tape[0].src).toBe('10+0');
+  });
+});
+
+describe('serializeScientificSection (MATH4)', () => {
+  it('round-trips the spec’s section through parse without losing anything', () => {
+    expect(serializeScientificSection(parseScientificSection(SAVED_SCIENTIFIC))).toEqual(
+      SAVED_SCIENTIFIC,
+    );
+  });
+
+  it('tolerates unknown keys inside the section, written by a newer build', () => {
+    const future = { ...SAVED_SCIENTIFIC, memory: 42, precision: { digits: 12 } };
+    expect(serializeScientificSection(parseScientificSection(future))).toEqual(future);
+  });
+});
+
+describe('scientificSnapshot (MATH4)', () => {
+  function run(state: SciState, ...actions: SciAction[]): SciState {
+    return actions.reduce(reduceSci, state);
+  }
+
+  function enter(state: SciState, src: string): SciState {
+    return run(state, { type: 'setInput', src }, { type: 'submit' });
+  }
+
+  it('stores the mode, the collapse and the successful rows only', () => {
+    let state = enter(initialSciState, 'sin(45)');
+    state = enter(state, '2 +'); // a failed line is a response, not history
+    state = run(state, { type: 'toggleKeypad' });
+    expect(scientificSnapshot(state)).toEqual({
+      angleMode: 'deg',
+      keypadCollapsed: true,
+      tape: [{ src: 'sin(45)', result: '0.70710678', angleMode: 'deg' }],
+      extra: {},
+    });
+  });
+
+  it('survives a full round-trip: state → disk → state', async () => {
+    let state = enter(initialSciState, '12! / 10!');
+    state = enter(state, 'ans × 4');
+    state = run(state, { type: 'setAngleMode', mode: 'rad' });
+    state = enter(state, 'sin(45)');
+    state = run(state, { type: 'toggleKeypad' });
+
+    const storage = fakeStorage();
+    await saveScientific(storage, scientificSnapshot(state));
+    const restored = await loadScientific(storage);
+    const reopened = reduceSci(initialSciState, {
+      type: 'hydrate',
+      tape: restored.tape,
+      angleMode: restored.angleMode,
+      keypadCollapsed: restored.keypadCollapsed,
+    });
+
+    expect(reopened.tape.map((row) => [row.src, row.result, row.angleMode])).toEqual([
+      ['12! / 10!', '132', 'deg'],
+      ['ans × 4', '528', 'deg'],
+      ['sin(45)', '0.85090352', 'rad'],
+    ]);
+    expect(reopened.angleMode).toBe('rad');
+    expect(reopened.keypadCollapsed).toBe(true);
+    // …and the reopened tool keeps chaining from where the session left off.
+    expect(enter(reopened, 'ans').tape[3].result).toBe('0.85090352');
+  });
+});
+
+describe('saveScientific / loadScientific (MATH4)', () => {
+  it('stamps the version and leaves the shell and other tools alone', async () => {
+    const storage = fakeStorage({
+      version: 1,
+      shell: { lastTool: 'graphing' },
+      graphing: { exprs: [{ src: 'sin(x)' }] },
+    });
+    await saveScientific(storage, parseScientificSection(SAVED_SCIENTIFIC));
+    expect(storage.cell.value).toEqual({
+      version: MATH_STATE_VERSION,
+      shell: { lastTool: 'graphing' },
+      graphing: { exprs: [{ src: 'sin(x)' }] },
+      scientific: SAVED_SCIENTIFIC,
+    });
+  });
+
+  it('reads back an empty tape when nothing has been saved yet', async () => {
+    expect(await loadScientific(fakeStorage())).toEqual(emptyScientific);
+  });
+
+  it('does not let the two tools’ saves drop each other', async () => {
+    const storage = fakeStorage();
+    await saveGraphing(storage, parseGraphingSection(SAVED_GRAPHING));
+    await saveScientific(storage, parseScientificSection(SAVED_SCIENTIFIC));
+    await saveLastTool(storage, 'scientific');
+    expect(await loadGraphing(storage)).toMatchObject({ exprs: SAVED_GRAPHING.exprs });
+    expect(await loadScientific(storage)).toMatchObject({ tape: SAVED_SCIENTIFIC.tape });
   });
 });
