@@ -1,5 +1,20 @@
 # Documentation log
 
+### 2026-08-25 — MATH8: Publish Math v1 to the catalog
+
+Bumped Math to `1.0.0` and published its `catalog.json` entry beside Disk Manager, produced by
+the PL15 pipeline itself and committed in the exact canonical bytes `serializeCatalog` emits so
+the `math-v1.0.0` tag-push regeneration is a no-op diff; `package-lock.json` was synced to the
+bumped workspace version so the release workflow's `npm ci` resolves it. New tests pack the real
+plugin and assert the produced entry is `parseCatalog`-valid with a `sha256` matching the packed
+zip, that the zip is the complete flat install dir (`index.js` + `manifest.json` + `styles.css`,
+no stray chunk — Math is the first published plugin shipping a large bundled dependency), and
+that every committed entry sits at the version its plugin manifest declares. Why: this is the
+mechanically-gatable half of shipping Math to the marketplace — the tag push itself, the
+release-asset upload, and real install/hot-load QA stay CI + the parked human step, same as
+DISK9. Files: plugins/math/manifest.json, plugins/math/package.json, catalog.json,
+package-lock.json, scripts/build-catalog.test.mjs, structure.md, documentation.md.
+
 ### 2026-08-25 — MATH6: Export + insert-into-note
 
 Copy-as-LaTeX and the notes bridge, everywhere the wireframe shows them. The SDK grew the
