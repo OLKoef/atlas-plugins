@@ -49,8 +49,12 @@ export function isLiveTool(value: unknown): value is LiveToolId {
 /**
  * The per-tool state the shell retains while a tool is hidden. MATH1 keeps each tool's
  * *draft input line* — the always-present entry field every tool's wireframe leads with
- * (Graphing's blank next cell, Scientific's `›` input row, Matrix's compute line). MATH2/4/5
- * grow these slices into the tools' real state without changing how retention works.
+ * (Graphing's blank next cell, Scientific's `›` input row, Matrix's compute line).
+ *
+ * A tool supersedes its slice once it ships: MATH2's Graphing owns a rail of rows and a
+ * viewport in its own reducer, kept alive by the pane staying mounted, so `drafts.graphing`
+ * is no longer rendered. The slice stays in the shape both because it is the shell's proof
+ * that a switch never touches another tool's state, and because MATH4 / MATH5 still use it.
  */
 export type ToolDrafts = Record<LiveToolId, string>;
 

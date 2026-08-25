@@ -6,9 +6,11 @@
  *
  * The key structural guarantee: **all three live panes are rendered on every pass**, with
  * the inactive ones hidden rather than unmounted. That is what makes "each tool keeps its
- * state while hidden" true for tool-local React state once MATH2/4/5 land.
+ * state while hidden" true for tool-local React state — which MATH2's Graphing tool is the
+ * first to rely on, since its rail and viewport live in its own reducer.
  */
 
+import { Graphing } from './Graphing';
 import { Topbar } from './Topbar';
 import { ToolPane } from './ToolPane';
 import { LIVE_TOOLS } from './lib/shellModel';
@@ -40,7 +42,9 @@ export function MathShell({
             draft={drafts[tool]}
             preview={previews[tool] ?? null}
             onDraftChange={(src) => onDraftChange(tool, src)}
-          />
+          >
+            {tool === 'graphing' ? <Graphing /> : null}
+          </ToolPane>
         ))}
       </div>
     </div>

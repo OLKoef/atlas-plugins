@@ -1,16 +1,17 @@
 /**
  * Math — a tool's pane inside the shell (MATH1).
  *
- * Each live tool gets one pane. MATH1 ships the pane *frame* plus the one thing every tool's
- * wireframe leads with — its draft input line (Graphing's always-present blank next cell,
- * Scientific's `›` input row, Matrix's compute line) — and that draft is the per-tool state
- * the shell proves it retains while the pane is hidden. MATH2 / MATH4 / MATH5 replace the
- * body below with the real rail + canvas, tape + keypad, and matrix rail + editor.
+ * Each live tool gets one pane. A pane whose tool has shipped renders that tool as its
+ * `children` (MATH2: Graphing's rail + canvas); the rest fall back to the MATH1 placeholder
+ * body — the one thing every tool's wireframe leads with, its draft input line (Scientific's
+ * `›` input row, Matrix's compute line) — which doubles as the per-tool state the shell
+ * proves it retains while the pane is hidden. MATH4 / MATH5 replace those in turn.
  *
- * Panes are never unmounted on a tool switch — only hidden — so once those tools own local
- * component state, that state survives a switch too.
+ * Panes are never unmounted on a tool switch — only hidden — so a shipped tool's own local
+ * component state survives a switch too.
  */
 
+import type { ReactNode } from 'react';
 import { paneDomId, tabDomId } from './Topbar';
 import type { LiveToolId } from './lib/shellModel';
 
@@ -49,6 +50,7 @@ export function ToolPane({
   draft,
   preview,
   onDraftChange,
+  children,
 }: {
   tool: LiveToolId;
   active: boolean;
@@ -56,6 +58,8 @@ export function ToolPane({
   /** live ghost result for the draft, or null when there is nothing to show. */
   preview: string | null;
   onDraftChange(src: string): void;
+  /** the shipped tool for this pane; absent tools fall back to the placeholder body. */
+  children?: ReactNode;
 }) {
   const copy = TOOL_COPY[tool];
   return (
@@ -66,24 +70,41 @@ export function ToolPane({
       aria-labelledby={tabDomId(tool)}
       hidden={!active}
     >
-      <div className="pane-card">
-        <h2 className="pane-title">{copy.title}</h2>
-        <p className="pane-blurb">{copy.blurb}</p>
-        <div className="pane-input-row">
-          <span className="pane-prompt" aria-hidden="true">
-            ›
-          </span>
-          <input
-            className="pane-input"
-            type="text"
-            value={draft}
-            placeholder={copy.draftPlaceholder}
-            aria-label={`${copy.title} input`}
-            onChange={(e) => onDraftChange(e.target.value)}
-          />
-          {preview ? <span className="pane-preview">= {preview}</span> : null}
-        </div>
-      </div>
+      {children ?? <PlaceholderBody copy={copy} draft={draft} preview={preview} onDraftChange={onDraftChange} />}
     </section>
+  );
+}
+
+/** MATH1's pane body, still standing in for the tools MATH4 / MATH5 have yet to build. */
+function PlaceholderBody({
+  copy,
+  draft,
+  preview,
+  onDraftChange,
+}: {
+  copy: ToolCopy;
+  draft: string;
+  preview: string | null;
+  onDraftChange(src: string): void;
+}) {
+  return (
+    <div className="pane-card">
+      <h2 className="pane-title">{copy.title}</h2>
+      <p className="pane-blurb">{copy.blurb}</p>
+      <div className="pane-input-row">
+        <span className="pane-prompt" aria-hidden="true">
+          ›
+        </span>
+        <input
+          className="pane-input"
+          type="text"
+          value={draft}
+          placeholder={copy.draftPlaceholder}
+          aria-label={`${copy.title} input`}
+          onChange={(e) => onDraftChange(e.target.value)}
+        />
+        {preview ? <span className="pane-preview">= {preview}</span> : null}
+      </div>
+    </div>
   );
 }

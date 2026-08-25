@@ -1,9 +1,9 @@
 /*
- * Math plugin styles (MATH1). Ported from MathPluginApproved.html but scoped under
+ * Math plugin styles (MATH1 + MATH2). Ported from MathPluginApproved.html but scoped under
  * `.atlas-math` (tokens + component classes) so the plugin can never clobber the host's
- * global CSS. Covers the plugin topbar + tool tabs and the tool-pane frame; MATH2/MATH4/
- * MATH5 add the graphing rail + canvas, the scientific tape + keypad, and the matrix rail
- * + editor styling on top of the same tokens.
+ * global CSS. Covers the plugin topbar + tool tabs, the tool-pane frame, and the graphing
+ * rail + canvas; MATH4/MATH5 add the scientific tape + keypad and the matrix rail + editor
+ * styling on top of the same tokens.
  */
 
 .atlas-math {
@@ -15,7 +15,9 @@
   --text-tertiary: #9da3b4;
   --accent: #4c5de6;
   --accent-subtle: rgba(76, 93, 230, 0.1);
+  --accent-subtle-hover: rgba(76, 93, 230, 0.18);
   --destructive: #d93f3f;
+  --destructive-subtle: rgba(217, 63, 63, 0.1);
   --success: #2a9060;
   --warning: #b86a00;
   --border: #dadce6;
@@ -28,6 +30,7 @@
   --size-body: 15px;
   --size-callout: 13px;
   --size-caption: 12px;
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
@@ -60,7 +63,9 @@
   --text-tertiary: #565b6b;
   --accent: #7b8ef8;
   --accent-subtle: rgba(123, 142, 248, 0.12);
+  --accent-subtle-hover: rgba(123, 142, 248, 0.22);
   --destructive: #f0554a;
+  --destructive-subtle: rgba(240, 85, 74, 0.12);
   --success: #4ac48a;
   --warning: #f0a83a;
   --border: #282b3e;
@@ -250,4 +255,383 @@
   font-family: var(--font-mono);
   font-size: var(--size-callout);
   color: var(--text-tertiary);
+}
+
+/* ------------------------------------------------------------------
+   Graphing (MATH2) — expression rail + plot canvas
+   ------------------------------------------------------------------ */
+.atlas-math .g-tool {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.atlas-math .g-rail {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.atlas-math .g-rail-head {
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.atlas-math .g-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: var(--size-caption);
+  font-weight: 600;
+  transition: background var(--t);
+}
+
+.atlas-math .g-add-btn:hover {
+  background: var(--accent-subtle-hover);
+}
+
+.atlas-math .g-add-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.atlas-math .g-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.atlas-math .g-list::-webkit-scrollbar {
+  width: 3px;
+}
+
+.atlas-math .g-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 99px;
+}
+
+/* Expression cell: full-width row, hairline divided, accent edge when active. */
+.atlas-math .g-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 10px 10px 8px;
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  position: relative;
+  transition: background var(--t);
+}
+
+.atlas-math .g-cell:hover {
+  background: var(--bg-elevated);
+}
+
+.atlas-math .g-cell.g-cell-active {
+  background: var(--bg-elevated);
+  border-left-color: var(--accent);
+}
+
+/* An unparseable row marks itself — and only itself; its neighbours keep plotting. */
+.atlas-math .g-cell.g-cell-error {
+  background: var(--destructive-subtle);
+  border-left-color: var(--destructive);
+}
+
+.atlas-math .g-gutter {
+  width: 24px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding-top: 1px;
+}
+
+.atlas-math .g-idx {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+/* The swatch reports a row's palette colour; hiding is the eye action, so it is inert. */
+.atlas-math .g-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.15);
+}
+
+.atlas-math .g-swatch.g-swatch-hidden {
+  background: transparent !important;
+  border: 2px solid var(--text-tertiary);
+}
+
+.atlas-math .g-swatch-ghost {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--border-strong);
+}
+
+.atlas-math .g-gutter-warn {
+  color: var(--destructive);
+  display: flex;
+}
+
+.atlas-math .g-gutter-warn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.atlas-math .g-cell-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.atlas-math .g-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 2px 0;
+}
+
+.atlas-math .g-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.atlas-math .g-cell-error .g-input {
+  color: var(--destructive);
+}
+
+.atlas-math .g-cell-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--t);
+}
+
+.atlas-math .g-cell:hover .g-cell-actions,
+.atlas-math .g-cell-active .g-cell-actions,
+.atlas-math .g-cell:focus-within .g-cell-actions {
+  opacity: 1;
+}
+
+.atlas-math .g-cell-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  transition: all var(--t);
+}
+
+.atlas-math .g-cell-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.atlas-math .g-cell-btn.g-del:hover {
+  color: var(--destructive);
+  background: var(--destructive-subtle);
+}
+
+.atlas-math .g-cell-btn svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Parse error message under the input. */
+.atlas-math .g-error-msg {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--destructive);
+}
+
+.atlas-math .g-error-msg svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  flex-shrink: 0;
+}
+
+/* Canvas. */
+.atlas-math .g-canvas {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.atlas-math .g-plot-host {
+  position: absolute;
+  inset: 0;
+}
+
+/* function-plot draws with its own class names; theme them off our tokens. */
+.atlas-math .g-plot-host .domain,
+.atlas-math .g-plot-host .tick line {
+  stroke: var(--border-strong);
+}
+
+.atlas-math .g-plot-host .tick text {
+  font: 10px var(--font-mono);
+  fill: var(--text-tertiary);
+}
+
+.atlas-math .g-plot-host .x.axis .tick line,
+.atlas-math .g-plot-host .y.axis .tick line {
+  opacity: 0.55;
+}
+
+.atlas-math .g-zoom-stack {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  overflow: hidden;
+}
+
+.atlas-math .g-zoom-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 15px;
+  transition: all var(--t);
+}
+
+.atlas-math .g-zoom-btn + .g-zoom-btn {
+  border-top: 1px solid var(--border);
+}
+
+.atlas-math .g-zoom-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.atlas-math .g-zoom-btn svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.atlas-math .g-window-readout {
+  position: absolute;
+  bottom: 14px;
+  left: 14px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  opacity: 0.85;
+}
+
+/* Empty-canvas hint. */
+.atlas-math .g-empty-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.atlas-math .g-empty-hint p {
+  font-size: var(--size-callout);
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.atlas-math .g-hint-chips {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.atlas-math .g-hint-chip {
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--t);
+  box-shadow: var(--shadow-1);
+}
+
+.atlas-math .g-hint-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-subtle);
 }

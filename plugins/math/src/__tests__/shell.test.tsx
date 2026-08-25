@@ -75,14 +75,26 @@ describe('MathShell tool panes (MATH1)', () => {
 
   it('keeps hidden tools mounted so their state survives a switch', () => {
     // The structural half of "each tool keeps its state while hidden": inactive panes are
-    // rendered (with their draft intact) and merely hidden, never unmounted.
+    // rendered (with their state intact) and merely hidden, never unmounted.
     const html = render('scientific');
     expect(paneIsHidden(html, 'scientific')).toBe(false);
     expect(paneIsHidden(html, 'graphing')).toBe(true);
     expect(paneIsHidden(html, 'matrix')).toBe(true);
-    for (const draft of Object.values(DRAFTS)) {
-      expect(html).toContain(draft);
-    }
+    // The tools still on the MATH1 placeholder keep their draft…
+    expect(html).toContain(DRAFTS.scientific);
+    expect(html).toContain(DRAFTS.matrix);
+    // …and the hidden Graphing pane is still rendered, rail and all, which is what lets its
+    // own reducer state (MATH2) survive the switch.
+    expect(html).toContain('g-rail');
+  });
+
+  it('renders the shipped Graphing tool in its pane, not the placeholder card', () => {
+    const html = render('graphing');
+    expect(html).toContain('class="g-tool"');
+    expect(html).toContain('class="g-rail"');
+    expect(html).toContain('class="g-canvas"');
+    // The other two panes are still the MATH1 placeholder.
+    expect(html.match(/class="pane-card"/g)).toHaveLength(2);
   });
 
   it('shows only the selected tool', () => {
