@@ -26,6 +26,7 @@ export type PluginPermission =
   | 'disk:uninstall-app'
   | 'disk:reorg'
   | 'ai:chat'
+  | 'notes:insert'
   // Allow forward-compatible permission strings without losing autocomplete on the known set.
   | (string & {});
 
@@ -40,6 +41,7 @@ export const KNOWN_PERMISSIONS: readonly string[] = [
   'disk:uninstall-app',
   'disk:reorg',
   'ai:chat',
+  'notes:insert',
 ];
 
 /**

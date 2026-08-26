@@ -31,7 +31,8 @@ beforeAll(() => {
   if (!existsSync(path.join(repoRoot, 'sdk', 'dist', 'index.js'))) {
     execFileSync('npm', ['run', 'build:sdk'], { cwd: repoRoot, stdio: 'inherit' });
   }
-  if (!existsSync(path.join(repoRoot, 'plugins', 'disk-manager', 'dist', 'index.js'))) {
+  const built = (id) => existsSync(path.join(repoRoot, 'plugins', id, 'dist', 'index.js'));
+  if (!['disk-manager', 'math'].every(built)) {
     execFileSync('npm', ['run', 'build'], { cwd: repoRoot, stdio: 'inherit' });
   }
 }, 180_000);
@@ -50,14 +51,16 @@ function run(args) {
   }
 }
 
-const hasZip = (() => {
+const has = (bin, args) => {
   try {
-    execFileSync('zip', ['-h'], { stdio: 'ignore' });
+    execFileSync(bin, args, { stdio: 'ignore' });
     return true;
   } catch {
     return false;
   }
-})();
+};
+const hasZip = has('zip', ['-h']);
+const hasUnzip = has('unzip', ['-v']);
 
 describe('build-catalog.mjs — dry run over a supplied zip (deterministic)', () => {
   it('emits a parseCatalog-valid entry whose sha256 matches the zip', async () => {
@@ -163,7 +166,57 @@ describe('build-catalog.mjs — Disk Manager v1 publish (DISK9)', () => {
   });
 });
 
-describe('catalog.json — committed fetch target (DISK9)', () => {
+describe('build-catalog.mjs — Math v1 publish (MATH8)', () => {
+  // Math is the first published plugin that ships a large bundled dependency (mathjs +
+  // function-plot), so beyond the entry shape this asserts the zip the release uploads is
+  // the *complete* installable dir — a missing sibling chunk would only show up at install.
+  it.skipIf(!hasZip)('packs math@1.0.0 into a parseCatalog-valid entry whose sha256 matches the zip', async () => {
+    const { stdout, status } = run([
+      '--tag', 'math-v1.0.0',
+      '--repo', REPO,
+      '--skip-catalog',
+      '--dry-run',
+    ]);
+    expect(status).toBe(0);
+
+    const entry = parseCatalogEntry(JSON.parse(stdout)); // AC: schema accepted by parseCatalog
+    expect(entry.id).toBe('math');
+    expect(entry.name).toBe('Math');
+    expect(entry.version).toBe('1.0.0');
+    expect(entry.type).toBe('tool');
+    expect(entry.minAtlasApi).toBe(1);
+    expect(entry.downloadUrl).toBe(releaseAssetUrl(REPO, 'math-v1.0.0', 'math-v1.0.0.zip'));
+
+    const zipPath = path.join(repoRoot, 'dist-artifacts', 'math-v1.0.0.zip');
+    expect(existsSync(zipPath)).toBe(true);
+    const zipSha = createHash('sha256').update(await fs.readFile(zipPath)).digest('hex');
+    expect(entry.sha256).toBe(zipSha); // AC: sha256 matches the published zip
+  });
+
+  it.skipIf(!hasZip || !hasUnzip)('ships a flat, complete plugin dir — manifest + entry + styles, no stray chunk', () => {
+    const { status } = run(['--tag', 'math-v1.0.0', '--repo', REPO, '--skip-catalog', '--dry-run']);
+    expect(status).toBe(0);
+
+    const zipPath = path.join(repoRoot, 'dist-artifacts', 'math-v1.0.0.zip');
+    const names = execFileSync('unzip', ['-Z1', zipPath], { encoding: 'utf8' })
+      .split('\n')
+      .map((n) => n.trim())
+      .filter(Boolean)
+      .sort();
+    // Exactly what manifest.entry/styles declare — the installer unpacks this dir verbatim.
+    expect(names).toEqual(['index.js', 'manifest.json', 'styles.css']);
+  });
+
+  it('rejects a math tag whose version disagrees with the bumped manifest', async () => {
+    const dir = await tmpRoot();
+    const zip = path.join(dir, 'math-v0.1.0.zip');
+    await fs.writeFile(zip, 'stale');
+    const { status } = run(['--tag', 'math-v0.1.0', '--zip', zip, '--repo', REPO, '--dry-run']);
+    expect(status).toBe(1);
+  });
+});
+
+describe('catalog.json — committed fetch target (DISK9, MATH8)', () => {
   let raw;
   let catalog;
   beforeAll(async () => {
@@ -182,6 +235,26 @@ describe('catalog.json — committed fetch target (DISK9)', () => {
       releaseAssetUrl(REPO, 'disk-manager-v1.0.0', 'disk-manager-v1.0.0.zip'),
     );
     expect(entry.sha256).toMatch(/^[a-f0-9]{64}$/); // a real digest, not a placeholder
+  });
+
+  it('publishes a schema-valid math@1.0.0 entry', () => {
+    const entry = catalog.plugins.find((p) => p.id === 'math');
+    expect(entry).toBeDefined();
+    expect(entry.name).toBe('Math');
+    expect(entry.version).toBe('1.0.0');
+    expect(entry.type).toBe('tool');
+    expect(entry.minAtlasApi).toBe(1);
+    expect(entry.downloadUrl).toBe(releaseAssetUrl(REPO, 'math-v1.0.0', 'math-v1.0.0.zip'));
+    expect(entry.sha256).toMatch(/^[a-f0-9]{64}$/); // a real digest, not a placeholder
+  });
+
+  it('keeps every entry at the version its plugin manifest declares', async () => {
+    for (const entry of catalog.plugins) {
+      const manifest = JSON.parse(
+        await fs.readFile(path.join(repoRoot, 'plugins', entry.id, 'manifest.json'), 'utf8'),
+      );
+      expect(`${entry.id}@${entry.version}`).toBe(`${manifest.id}@${manifest.version}`);
+    }
   });
 
   it('is already in the pipeline\'s canonical form (tag-push regeneration is a no-op diff)', () => {

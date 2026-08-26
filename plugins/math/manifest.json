@@ -1,0 +1,15 @@
+{
+  "id": "math",
+  "name": "Math",
+  "version": "1.0.0",
+  "type": "tool",
+  "entry": "index.js",
+  "styles": "styles.css",
+  "minAtlasApi": 1,
+  "description": "A Desmos-inspired math suite in one tool — graphing, a scientific calculator with tape, and matrices at any size.",
+  "author": "Atlas",
+  "permissions": [
+    "storage",
+    "notes:insert"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@atlas/plugin-math",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@atlas/plugin-sdk": "*",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  },
+  "dependencies": {
+    "function-plot": "^1.25.4",
+    "mathjs": "^15.2.0"
+  }
+}

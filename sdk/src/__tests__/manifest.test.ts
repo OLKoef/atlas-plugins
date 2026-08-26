@@ -89,6 +89,9 @@ describe('isKnownPermission', () => {
       expect(isKnownPermission(p)).toBe(true);
     }
   });
+  it('knows the notes-insert permission (MATH6/MATH7)', () => {
+    expect(isKnownPermission('notes:insert')).toBe(true);
+  });
   it('is permissive: unknown strings are simply not "known"', () => {
     expect(isKnownPermission('future:thing')).toBe(false);
     // ...but they still parse (additive vocabulary).
