@@ -58,7 +58,8 @@ implementation.md is this repo's source of truth (it cannot read Dashboard's Typ
   `window.AtlasPluginRuntime` global), and `InstalledPlugin` / `CatalogEntry`.
 - `src/catalog.ts` — the `Catalog` (`{ plugins }`) file shape + the pure `parseCatalog` /
   `parseCatalogEntry` / `safeParseCatalog` validator (the PL6 acceptance seam), plus the
-  pipeline builders `buildCatalogEntry` (manifest + release facts → a self-validated entry),
+  pipeline builders `buildCatalogEntry` (manifest + release facts → a self-validated entry,
+  carrying the manifest's `permissions` as declared, in order — CAT2),
   `upsertCatalogEntry` (replace-by-id, id-sorted) and `serializeCatalog` (canonical committed
   bytes). Used by the PL15 pipeline and reusable by the PL16 website.
 - `src/index.ts` — public barrel (`.` export → types + validator + version).
@@ -476,6 +477,13 @@ test walks every catalog entry back to its plugin manifest, so a future bump tha
 place but not the other fails the gate. Publishing is the `math-v1.0.0` tag push (`git tag
 math-v1.0.0 && git push origin math-v1.0.0` once this is on the default branch); as with DISK9,
 the release-asset upload and real install / hot-load QA stay CI + a parked human step.
+
+**CAT2 — entries list permissions.** Each `CatalogEntry` now carries an optional `permissions`
+array (the manifest's, verbatim and in order; `parseCatalogEntry` accepts rows without it so
+pre-CAT2 catalogs still parse) so the Dashboard Plugins page (PV4a) can show what a plugin will
+be able to do before install. The two published entries were backfilled from their manifests
+with every other byte (incl. `sha256` / download URLs) untouched; a catalog test asserts each
+committed entry's permissions equal its manifest's.
 
 ## Authoring a plugin
 

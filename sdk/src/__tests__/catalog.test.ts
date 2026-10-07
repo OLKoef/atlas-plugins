@@ -56,6 +56,12 @@ describe('parseCatalogEntry — valid', () => {
     expect(parsed.icon).toBeUndefined();
     expect(parsed.homepage).toBeUndefined();
     expect(parsed.screenshots).toBeUndefined();
+    expect(parsed.permissions).toBeUndefined();
+  });
+
+  it('accepts permissions, preserving order', () => {
+    const withPerms = { ...ENTRY, permissions: ['disk:read', 'ai:chat'] };
+    expect(parseCatalogEntry(withPerms).permissions).toEqual(['disk:read', 'ai:chat']);
   });
 });
 
@@ -73,6 +79,8 @@ describe('parseCatalogEntry — invalid', () => {
     ['uppercase sha256', { ...ENTRY, sha256: 'A'.repeat(64) }],
     ['non-url icon', { ...ENTRY, icon: 'icon.svg' }],
     ['screenshots not urls', { ...ENTRY, screenshots: ['not a url'] }],
+    ['permissions not an array', { ...ENTRY, permissions: 'storage' }],
+    ['permissions with a non-string', { ...ENTRY, permissions: ['storage', 7] }],
   ];
   it.each(cases)('rejects %s', (_label, value) => {
     expect(() => parseCatalogEntry(value)).toThrow(CatalogError);
@@ -111,7 +119,7 @@ describe('buildCatalogEntry', () => {
       sha256: SHA,
       icon: ENTRY.icon,
     });
-    expect(entry).toEqual(ENTRY);
+    expect(entry).toEqual({ ...ENTRY, permissions: ['tasks:read', 'focus:write'] });
     // A built entry is guaranteed to satisfy parseCatalog.
     expect(parseCatalog({ plugins: [entry] }).plugins[0]).toEqual(entry);
   });
@@ -123,6 +131,17 @@ describe('buildCatalogEntry', () => {
     const entry = buildCatalogEntry(noIcon, { downloadUrl: ENTRY.downloadUrl, sha256: SHA });
     expect(entry.icon).toBeUndefined();
     expect(entry.homepage).toBeUndefined();
+  });
+
+  it('copies the manifest permissions as declared, in order (CAT2)', () => {
+    const perms = ['storage', 'notes:insert', 'disk:read'];
+    const entry = buildCatalogEntry({ ...MANIFEST, permissions: perms }, { downloadUrl: ENTRY.downloadUrl, sha256: SHA });
+    expect(entry.permissions).toEqual(perms);
+  });
+
+  it('keeps an empty permissions list (the plugin asks for nothing)', () => {
+    const entry = buildCatalogEntry({ ...MANIFEST, permissions: [] }, { downloadUrl: ENTRY.downloadUrl, sha256: SHA });
+    expect(entry.permissions).toEqual([]);
   });
 });
 

@@ -1,5 +1,15 @@
 # Documentation log
 
+### 2026-10-07 — CAT2: Catalogue entries list the plugin's permissions
+
+`buildCatalogEntry` now copies `manifest.permissions` (as declared, in order) into each catalog
+entry, `CatalogEntry` gained an optional `permissions` field that `parseCatalogEntry` validates
+and preserves, and the committed `disk-manager` and `math` entries were backfilled from their
+manifests with every other field (incl. `sha256` and download URLs) byte-identical. Why: the
+Dashboard Plugins page (PV4a) needs to say what a plugin will be able to do before it is
+installed. Files: sdk/src/catalog.ts, sdk/src/plugin.ts, sdk/src/__tests__/catalog.test.ts,
+scripts/build-catalog.test.mjs, catalog.json, structure.md, documentation.md.
+
 ### 2026-08-25 — MATH8: Publish Math v1 to the catalog
 
 Bumped Math to `1.0.0` and published its `catalog.json` entry beside Disk Manager, produced by

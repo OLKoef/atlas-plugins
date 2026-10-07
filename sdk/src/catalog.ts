@@ -1,4 +1,4 @@
-import { PLUGIN_TYPES, type PluginManifest, type PluginType } from './manifest.js';
+import { PLUGIN_TYPES, type PluginManifest, type PluginPermission, type PluginType } from './manifest.js';
 import type { CatalogEntry } from './plugin.js';
 
 /**
@@ -97,6 +97,15 @@ export function parseCatalogEntry(input: unknown): CatalogEntry {
     throw new CatalogError('catalog entry minAtlasApi must be a positive integer');
   }
 
+  const permissionsRaw = input.permissions;
+  if (
+    permissionsRaw !== undefined &&
+    (!Array.isArray(permissionsRaw) || !permissionsRaw.every((p) => typeof p === 'string' && p.trim() !== ''))
+  ) {
+    throw new CatalogError('catalog entry permissions must be an array of non-empty strings');
+  }
+  const permissions = permissionsRaw as PluginPermission[] | undefined;
+
   const downloadUrl = requireHttpUrl(requireString(input, 'downloadUrl'), 'downloadUrl');
 
   const sha256 = requireString(input, 'sha256');
@@ -129,6 +138,7 @@ export function parseCatalogEntry(input: unknown): CatalogEntry {
     ...(icon ? { icon } : {}),
     ...(homepage ? { homepage } : {}),
     minAtlasApi,
+    ...(permissions ? { permissions: [...permissions] } : {}),
     downloadUrl,
     sha256,
     ...(screenshots ? { screenshots } : {}),
@@ -199,6 +209,8 @@ export function buildCatalogEntry(manifest: PluginManifest, release: ReleaseFact
     ...(release.icon ? { icon: release.icon } : {}),
     ...(manifest.homepage ? { homepage: manifest.homepage } : {}),
     minAtlasApi: manifest.minAtlasApi,
+    // As declared, in order, so the Plugins page can list them before install (CAT2).
+    permissions: manifest.permissions,
     downloadUrl: release.downloadUrl,
     sha256: release.sha256,
     ...(release.screenshots && release.screenshots.length ? { screenshots: release.screenshots } : {}),
