@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import type { AtlasPluginApi } from './api.js';
-import type { PluginManifest, PluginType } from './manifest.js';
+import type { PluginManifest, PluginPermission, PluginType } from './manifest.js';
 
 /**
  * What a plugin bundle's `index.js` default-exports (implementation.md §2).
@@ -66,6 +66,11 @@ export interface CatalogEntry {
   icon?: string;
   homepage?: string;
   minAtlasApi: number;
+  /**
+   * the manifest's declared permissions, in manifest order (CAT2) — lets the Plugins page
+   * say what a plugin can do before install. Optional so pre-CAT2 rows still parse.
+   */
+  permissions?: PluginPermission[];
   /** URL of the release zip. */
   downloadUrl: string;
   /** sha256 of the release zip, hex-encoded. */

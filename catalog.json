@@ -8,6 +8,14 @@
       "description": "See what's taking up space across Local and iCloud, then reclaim it — a treemap you can click straight into a triage session.",
       "author": "Atlas",
       "minAtlasApi": 1,
+      "permissions": [
+        "disk:read",
+        "disk:trash",
+        "disk:evict",
+        "disk:uninstall-app",
+        "disk:reorg",
+        "ai:chat"
+      ],
       "downloadUrl": "https://github.com/OLKoef/atlas-plugins/releases/download/disk-manager-v1.0.0/disk-manager-v1.0.0.zip",
       "sha256": "f165c54818f87068730b812fe94dd8495ea3aefb29bfbff0da8b5b8cfd79bb38"
     },
@@ -19,6 +27,10 @@
       "description": "A Desmos-inspired math suite in one tool — graphing, a scientific calculator with tape, and matrices at any size.",
       "author": "Atlas",
       "minAtlasApi": 1,
+      "permissions": [
+        "storage",
+        "notes:insert"
+      ],
       "downloadUrl": "https://github.com/OLKoef/atlas-plugins/releases/download/math-v1.0.0/math-v1.0.0.zip",
       "sha256": "8734fb1d8568092ad7a08cd355924791ab816d0f975c264d593fa66c56939b43"
     }

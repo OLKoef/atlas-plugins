@@ -91,6 +91,21 @@ describe('build-catalog.mjs — dry run over a supplied zip (deterministic)', ()
     expect(existsSync(path.join(repoRoot, 'dist-artifacts'))).toBe(false);
   });
 
+  it('carries the manifest\'s permissions, as declared and in order (CAT2)', async () => {
+    const dir = await tmpRoot();
+    const zip = path.join(dir, 'math-v1.0.0.zip');
+    await fs.writeFile(zip, 'pretend-zip-bytes\n');
+    const { stdout, status } = run(['--tag', 'math-v1.0.0', '--zip', zip, '--repo', REPO, '--dry-run']);
+    expect(status).toBe(0);
+
+    const manifest = JSON.parse(
+      await fs.readFile(path.join(repoRoot, 'plugins', 'math', 'manifest.json'), 'utf8'),
+    );
+    const entry = parseCatalog(JSON.parse(stdout)).plugins.find((p) => p.id === 'math');
+    expect(entry.permissions).toEqual(manifest.permissions);
+    expect(entry.permissions).toEqual(['storage', 'notes:insert']);
+  });
+
   it('fails when the tag version disagrees with the manifest', async () => {
     const dir = await tmpRoot();
     const zip = path.join(dir, 'x.zip');
@@ -254,6 +269,15 @@ describe('catalog.json — committed fetch target (DISK9, MATH8)', () => {
         await fs.readFile(path.join(repoRoot, 'plugins', entry.id, 'manifest.json'), 'utf8'),
       );
       expect(`${entry.id}@${entry.version}`).toBe(`${manifest.id}@${manifest.version}`);
+    }
+  });
+
+  it('lists every entry\'s permissions exactly as its plugin manifest declares them (CAT2)', async () => {
+    for (const entry of catalog.plugins) {
+      const manifest = JSON.parse(
+        await fs.readFile(path.join(repoRoot, 'plugins', entry.id, 'manifest.json'), 'utf8'),
+      );
+      expect(entry.permissions, entry.id).toEqual(manifest.permissions);
     }
   });
 
